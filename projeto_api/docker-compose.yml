@@ -1,0 +1,34 @@
+services:
+  # Container do banco de dados (PostgreSQL)
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: iot_sensores
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Script SQL executado na primeira inicialização do banco
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d iot_sensores"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Container da API REST
+  api:
+    build: .
+    environment:
+      # Dentro da rede do compose, o banco é acessado pelo nome "db"
+      DATABASE_URI: postgresql://postgres:admin@db:5432/iot_sensores
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

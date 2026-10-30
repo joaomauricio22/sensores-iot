@@ -1,0 +1,17 @@
+# Diretório de dados do PostgreSQL local (não faz parte do projeto)
+.pgdata/
+
+# Caches Python
+__pycache__/
+*.pyc
+
+# Ambientes virtuais
+.venv/
+venv/
+
+# Arquivos de estudo pessoal (não subir ao repositório)
+ROTEIRO-DEFESA.md
+AUTOAVALIACAO.md
+
+# Material da disciplina (fornecido pelo professor)
+drive-download-*/
