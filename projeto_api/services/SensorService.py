@@ -19,7 +19,7 @@ class SensorService:
         return self.__repository.get_by_id(sensor_id)
 
     def add(self, identificador: str, nome: str = None, tipo_sensor_id: int = None,
-            limite_min: float = None, limite_max: float = None, data_cadastro=None) -> Sensor:
+            limite_min: float = None, limite_max: float = None) -> Sensor:
         # Regra 1: identificador obrigatório e único.
         if not identificador or not str(identificador).strip():
             raise ValidationError("O identificador do sensor é obrigatório.")
@@ -40,7 +40,6 @@ class SensorService:
             tipo_sensor_id=tipo_sensor_id,
             limite_min=limite_min,
             limite_max=limite_max,
-            data_cadastro=data_cadastro,
         )
         return self.__repository.add(sensor)
 

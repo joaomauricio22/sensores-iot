@@ -5,6 +5,9 @@ from marshmallow import ValidationError
 from entities.Anomalia import Anomalia
 from repositories.AnomaliaRepository import AnomaliaRepository
 
+# Métodos de identificação de anomalia aceitos pelo sistema.
+METODOS_VALIDOS = {"LIMITE", "ESTATISTICO", "MODELO_ML"}
+
 
 # Camada de serviço: regras de negócio e CRUD da entidade Anomalia.
 # Em uso normal as anomalias são geradas automaticamente pela análise,
@@ -30,6 +33,10 @@ class AnomaliaService:
             raise ValidationError("A data/hora é obrigatória.")
         if not metodo or not str(metodo).strip():
             raise ValidationError("O método de identificação é obrigatório.")
+        if metodo not in METODOS_VALIDOS:
+            raise ValidationError(
+                "Método inválido. Use um destes: LIMITE, ESTATISTICO ou MODELO_ML."
+            )
 
         try:
             valor = float(valor)
@@ -53,6 +60,11 @@ class AnomaliaService:
         anomalia = self.__repository.get_by_id(anomalia_id)
         if not anomalia:
             return None
+
+        if metodo not in METODOS_VALIDOS:
+            raise ValidationError(
+                "Método inválido. Use um destes: LIMITE, ESTATISTICO ou MODELO_ML."
+            )
 
         anomalia.leitura_id = leitura_id
         anomalia.sensor_id = sensor_id

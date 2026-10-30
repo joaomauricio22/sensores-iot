@@ -33,7 +33,6 @@ class SensorRequestSchema(Schema):
     tipo_sensor_id = fields.Int(required=True)
     limite_min = fields.Float(required=True)
     limite_max = fields.Float(required=True)
-    data_cadastro = fields.DateTime(allow_none=True)
 
 
 class LeituraResponseSchema(Schema):
