@@ -1,7 +1,12 @@
-# Trabalho PAV — Análise de Dados de Sensores IoT
+# Trabalho PAV — Telemetria Veicular (OBD-II) e Detecção de Eventos de Risco
 
-Sistema para **receber, armazenar e consultar dados produzidos por sensores IoT**,
-realizando o tratamento e a análise dos dados para **identificar valores anormais**.
+Sistema para **receber, padronizar, armazenar e analisar dados de telemetria veicular**
+coletados via interface **OBD-II**, identificando **eventos de condução de risco**
+(frenagens bruscas, acelerações intensas, curvas fechadas).
+
+O pipeline de análise integra aprendizagem **não supervisionada (DBSCAN)** e
+**supervisionada (RandomForest)**, inspirado em pesquisa de Iniciação Científica
+desenvolvida no INMETRO.
 
 - **Aluno:** João Maurício Araújo Leitão
 - **Modalidade:** Individual
@@ -14,13 +19,17 @@ Trabalho_PAV/
 ├── projeto_api/            # Partes 2, 3 e 5 (modelos, API e Docker)
 │   ├── entities/           # Classes de modelo (SQLAlchemy)
 │   ├── repositories/       # Operações no banco de dados
-│   ├── services/           # Regras de negócio + detectores de anomalia + ML
-│   ├── controllers/        # Recebimento das requisições HTTP (schemas + Resources)
+│   ├── services/           # Regras de negócio + importação + análise
+│   │   ├── detectors/      # Detectores de risco (herança/polimorfismo)
+│   │   ├── features.py     # Extração de atributos (Força G, instabilidade)
+│   │   └── ImportadorService.py  # Padronização de parâmetros dos CSVs
+│   ├── controllers/        # Recebimento das requisições HTTP
 │   ├── routes/             # Mapeamento de URLs
 │   ├── config/             # Configuração (conexão com o banco)
 │   ├── app.py              # Ponto de entrada da API
 │   ├── init.sql            # Script de criação do banco
-│   ├── seed.py             # Carga de dados de exemplo
+│   ├── seed.py             # Cria catálogo/mapa e importa os CSVs reais
+│   ├── test_api.py         # Testes dos endpoints e regras
 │   ├── Dockerfile
 │   ├── docker-compose.yml
 │   └── requirements.txt
@@ -32,97 +41,78 @@ Trabalho_PAV/
 │   └── README.md
 │
 └── apresentacao/           # Parte 6 (apresentação)
-    ├── slides_pav.pptx     # Slides prontos
-    ├── gerar_slides.py     # Script que gera os slides
-    ├── roteiro-apresentacao.md
-    └── imgs/               # Capturas das telas
+    └── slides_pav.pptx
 ```
 
-## Documentação de apoio
-
-- **`ROTEIRO-DEFESA.md`** — guia de estudo para a apresentação/arguição: onde cada requisito foi implementado e respostas para as perguntas prováveis do professor.
-- **`GUIA-DE-USO.md`** — como usar o sistema no dia a dia (configuração inicial + operação contínua).
-- **`AUTOAVALIACAO.md`** — questionário com respostas para treinar a explicação do código.
-
-## Modelo de dados (4 tabelas)
+## Modelo de dados (5 tabelas)
 
 ```
-TipoSensor 1 ──── N Sensor 1 ──── N Leitura 1 ──── N Anomalia
+Parametro 1 ── N MapeamentoParametro
+Veiculo 1 ── N Leitura 1 ── N EventoRisco
 ```
 
 | Tabela | Descrição |
 |---|---|
-| `tipo_sensor` | Tipo de dado produzido (nome, unidade, descrição) |
-| `sensor` | Sensor com identificador único e limites mín/máx |
-| `leitura` | Medição (sensor, valor, data/hora, classificação) |
-| `anomalia` | Registro de anomalia (sensor, valor, data/hora, método) |
+| `veiculo` | Veículo monitorado (identificador único, modelo) |
+| `parametro` | Catálogo de parâmetros canônicos (nome, unidade, limites) |
+| `mapeamento_parametro` | Padronização: nome bruto da coluna → parâmetro canônico |
+| `leitura` | Frame de telemetria (velocidade, rpm, acelerações, ...) |
+| `evento_risco` | Evento de risco detectado (Força G, instabilidade, método) |
+
+## Padronização de parâmetros
+
+Fontes diferentes nomeiam a mesma grandeza de formas distintas (ex.: `Vehicle speed
+(km/h)` e `Velocidade do veículo (km/h)`). A tabela `mapeamento_parametro` traduz cada
+nome bruto para um parâmetro canônico; colunas não mapeadas são ignoradas na importação.
 
 ## Regras de negócio (10)
 
-1. Sensor com identificador único.
-2. Leitura exige sensor, valor e data/hora.
-3. Leitura apenas para sensor cadastrado.
-4. Valor numérico e finito.
-5. Sem leituras duplicadas (sensor + valor + instante).
-6. Limites mínimo/máximo por sensor.
-7. Anomalia = fora dos limites ou desvio do histórico.
+1. Veículo com identificador único.
+2. Leitura (frame) exige veículo e data/hora.
+3. Leitura apenas para veículo cadastrado.
+4. Valores numéricos e finitos.
+5. Sem frames duplicados (mesmo veículo + instante).
+6. Limites de referência por parâmetro.
+7. Evento de risco = Força G acima do limiar **ou** desvio do histórico.
 8. Classificação pelo modelo de ML.
-9. Registro da anomalia com o método de identificação.
-10. Análise histórica (padrões estatísticos).
+9. Registro do evento (veículo, valores, data/hora, método).
+10. Análise histórica (estatísticas de condução).
 
-## Como executar (com Docker — Parte 5)
+## Detecção de risco (3 métodos)
+
+- **LIMITE** — Força G resultante acima do limiar físico (0,5 g).
+- **ESTATISTICO** — z-score da Força G em relação ao histórico.
+- **MODELO_ML** — DBSCAN (pseudo-rótulos) + RandomForest.
+
+A Força G resultante é `√(ax² + ay² + az²) / 9,81`; a instabilidade é o desvio padrão
+da aceleração numa janela de ~3 s.
+
+## Como executar (com Docker)
 
 ```bash
 cd projeto_api
-docker compose up --build
+docker compose up --build -d        # sobe API (8080) + banco (5432)
+python seed.py                      # cria catálogo/mapa e importa os CSVs
 ```
 
-- API: http://localhost:8080/iot
-- Banco: PostgreSQL na porta 5432 (script `init.sql` aplicado automaticamente).
+- API: http://localhost:8080/telemetria
 
-A interface gráfica roda **fora** do container:
+Interface gráfica (roda fora do container):
 
 ```bash
 cd projeto_interface
 python main.py
 ```
 
-## Como executar (sem Docker, para desenvolvimento)
-
-1. Crie o banco PostgreSQL e aplique o script:
-   ```bash
-   psql -U postgres -c "CREATE DATABASE iot_sensores;"
-   psql -U postgres -d iot_sensores -f init.sql
-   ```
-2. Instale as dependências e suba a API:
-   ```bash
-   cd projeto_api
-   pip install -r requirements.txt
-   python app.py
-   ```
-3. (Opcional) Popule dados de exemplo:
-   ```bash
-   python seed.py
-   ```
-
 ## Endpoints principais
 
 | Método | Rota | Descrição |
 |---|---|---|
-| GET/POST | `/iot/tipos-sensor` | Listar / cadastrar tipos |
-| GET/PUT/DELETE | `/iot/tipos-sensor/<id>` | Selecionar / editar / excluir tipo |
-| GET/POST | `/iot/sensores` | Listar / cadastrar sensores |
-| GET/PUT/DELETE | `/iot/sensores/<id>` | Selecionar / editar / excluir sensor |
-| GET | `/iot/sensores/<id>/estatisticas` | Padrões estatísticos (regra 10) |
-| GET/POST | `/iot/leituras` | Listar / cadastrar leituras |
-| GET/PUT/DELETE | `/iot/leituras/<id>` | Selecionar / editar / excluir leitura |
-| POST | `/iot/leituras/<id>/analisar` | Detecção de anomalias (regra 7 e 9) |
-| POST | `/iot/leituras/<id>/classificar` | Classificação pelo ML (regra 8) |
-| GET/POST | `/iot/anomalias` | Listar / cadastrar anomalias |
-| GET/PUT/DELETE | `/iot/anomalias/<id>` | Selecionar / editar / excluir anomalia |
-
-## Detecção de anomalias (3 métodos)
-
-- **LIMITE** — valor fora dos limites mínimo/máximo.
-- **ESTATISTICO** — z-score (|z| > 3) em relação ao histórico.
-- **MODELO_ML** — `IsolationForest` (scikit-learn) treinado com o histórico.
+| GET/POST | `/telemetria/veiculos` | Listar / cadastrar veículos |
+| GET/PUT/DELETE | `/telemetria/veiculos/<id>` | Selecionar / editar / excluir |
+| GET | `/telemetria/veiculos/<id>/estatisticas` | Estatísticas de condução (regra 10) |
+| POST | `/telemetria/veiculos/<id>/analisar` | Detecção de eventos de risco (7, 8, 9) |
+| GET/POST | `/telemetria/parametros` | Listar / cadastrar parâmetros |
+| GET/POST | `/telemetria/mapeamentos` | Listar / cadastrar mapeamentos |
+| GET/POST | `/telemetria/leituras` | Listar / cadastrar leituras |
+| GET/POST | `/telemetria/eventos-risco` | Listar / cadastrar eventos |

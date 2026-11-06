@@ -1,22 +1,27 @@
 from abc import ABC, abstractmethod
 
 
-# Classe abstrata que define o contrato de um detector de anomalias.
-# Demonstra os conceitos de HERANÇA (as classes concretas herdam dela) e
-# POLIMORFISMO (cada subclasse implementa "detectar" de uma forma diferente).
+# Classe abstrata que define o contrato de um detector de eventos de risco.
+# Demonstra HERANÇA (as classes concretas herdam dela) e POLIMORFISMO
+# (cada subclasse implementa "detectar" de uma forma diferente).
 class DetectorAnomalia(ABC):
 
     @abstractmethod
-    def detectar(self, valor: float, sensor, historico: list) -> bool:
-        """Retorna True se o valor for considerado potencialmente anômalo.
+    def detectar(self, leituras: list, veiculo) -> list:
+        """Retorna a lista de eventos de risco detectados.
 
-        :param valor: valor medido que será avaliado.
-        :param sensor: sensor de origem da leitura (para acessar limites e tipo).
-        :param historico: lista de valores históricos do sensor (sem a leitura atual).
+        Cada evento é um dict com as chaves:
+          leitura       -> objeto Leitura sinalizado
+          forca_g       -> Força G calculada (float ou None)
+          instabilidade -> instabilidade da janela (float)
+          descricao     -> texto explicativo
+
+        :param leituras: leituras do veículo, em ordem cronológica.
+        :param veiculo: veículo de origem.
         """
         raise NotImplementedError
 
     @abstractmethod
     def get_metodo(self) -> str:
-        """Nome do método de detecção (usado no registro da anomalia)."""
+        """Nome do método de detecção (usado no registro do evento)."""
         raise NotImplementedError

@@ -7,13 +7,13 @@ import tkinter as tk
 from tkinter import ttk
 
 from api_client import ApiClient
-from tabs import AnomaliaTab, LeituraTab, SensorTab, TipoSensorTab
+from tabs import EventoRiscoTab, LeituraTab, MapeamentoTab, ParametroTab, VeiculoTab
 
 
 def main():
     root = tk.Tk()
-    root.title("Sistema de Análise de Dados de Sensores IoT")
-    root.geometry("1000x640")
+    root.title("Telemetria Veicular — Detecção de Eventos de Risco")
+    root.geometry("1100x680")
     root.configure(bg="#f5f6fa")
 
     api = ApiClient()
@@ -21,10 +21,11 @@ def main():
     notebook = ttk.Notebook(root)
     notebook.pack(fill="both", expand=True, padx=10, pady=10)
 
-    notebook.add(TipoSensorTab(notebook, api), text="Tipos de Sensor")
-    notebook.add(SensorTab(notebook, api), text="Sensores")
+    notebook.add(VeiculoTab(notebook, api), text="Veículos")
+    notebook.add(ParametroTab(notebook, api), text="Parâmetros")
+    notebook.add(MapeamentoTab(notebook, api), text="Mapeamentos")
     notebook.add(LeituraTab(notebook, api), text="Leituras")
-    notebook.add(AnomaliaTab(notebook, api), text="Anomalias")
+    notebook.add(EventoRiscoTab(notebook, api), text="Eventos de Risco")
 
     root.mainloop()
 

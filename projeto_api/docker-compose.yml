@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: admin
-      POSTGRES_DB: iot_sensores
+      POSTGRES_DB: telemetria
     ports:
       - "5432:5432"
     volumes:
@@ -13,7 +13,7 @@ services:
       # Script SQL executado na primeira inicialização do banco
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d iot_sensores"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d telemetria"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -23,7 +23,7 @@ services:
     build: .
     environment:
       # Dentro da rede do compose, o banco é acessado pelo nome "db"
-      DATABASE_URI: postgresql://postgres:admin@db:5432/iot_sensores
+      DATABASE_URI: postgresql://postgres:admin@db:5432/telemetria
     ports:
       - "8080:8080"
     depends_on:

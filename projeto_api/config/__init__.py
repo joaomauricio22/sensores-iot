@@ -6,6 +6,6 @@ import os
 class Config:
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "DATABASE_URI",
-        "postgresql://postgres:admin@localhost:5432/iot_sensores",
+        "postgresql://postgres:admin@localhost:5432/telemetria",
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False

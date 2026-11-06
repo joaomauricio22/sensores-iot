@@ -4,24 +4,24 @@ from flask_apispec.views import MethodResource
 from marshmallow import ValidationError
 from sqlalchemy.exc import IntegrityError, OperationalError
 
-from controllers.schemas import AnomaliaRequestSchema, AnomaliaResponseSchema
-from services.AnomaliaService import AnomaliaService
+from controllers.schemas import EventoRiscoRequestSchema, EventoRiscoResponseSchema
+from services.EventoRiscoService import EventoRiscoService
 
 
-class AnomaliaList(MethodResource, Resource):
+class EventoRiscoList(MethodResource, Resource):
 
     def __init__(self):
-        self.__service = AnomaliaService()
+        self.__service = EventoRiscoService()
 
-    @marshal_with(AnomaliaResponseSchema(many=True))
+    @marshal_with(EventoRiscoResponseSchema(many=True))
     def get(self):
         try:
             return self.__service.get_all(), 200
         except OperationalError:
             abort(500, message="Erro interno do servidor.")
 
-    @use_kwargs(AnomaliaRequestSchema, location="json")
-    @marshal_with(AnomaliaResponseSchema)
+    @use_kwargs(EventoRiscoRequestSchema, location="json")
+    @marshal_with(EventoRiscoResponseSchema)
     def post(self, **kwargs):
         try:
             return self.__service.add(**kwargs), 201
@@ -33,29 +33,29 @@ class AnomaliaList(MethodResource, Resource):
             abort(500, message="Erro interno do servidor.")
 
 
-class AnomaliaItem(MethodResource, Resource):
+class EventoRiscoItem(MethodResource, Resource):
 
     def __init__(self):
-        self.__service = AnomaliaService()
+        self.__service = EventoRiscoService()
 
-    @marshal_with(AnomaliaResponseSchema)
-    def get(self, anomalia_id):
+    @marshal_with(EventoRiscoResponseSchema)
+    def get(self, evento_id):
         try:
-            anomalia = self.__service.get_by_id(anomalia_id)
-            if not anomalia:
-                abort(404, message="Anomalia não encontrada.")
-            return anomalia, 200
+            evento = self.__service.get_by_id(evento_id)
+            if not evento:
+                abort(404, message="Evento não encontrado.")
+            return evento, 200
         except OperationalError:
             abort(500, message="Erro interno do servidor.")
 
-    @use_kwargs(AnomaliaRequestSchema, location="json")
-    @marshal_with(AnomaliaResponseSchema)
-    def put(self, anomalia_id, **kwargs):
+    @use_kwargs(EventoRiscoRequestSchema, location="json")
+    @marshal_with(EventoRiscoResponseSchema)
+    def put(self, evento_id, **kwargs):
         try:
-            anomalia = self.__service.update(anomalia_id, **kwargs)
-            if not anomalia:
-                abort(404, message="Anomalia não encontrada.")
-            return anomalia, 200
+            evento = self.__service.update(evento_id, **kwargs)
+            if not evento:
+                abort(404, message="Evento não encontrado.")
+            return evento, 200
         except ValidationError as e:
             abort(400, message=str(e))
         except IntegrityError:
@@ -63,11 +63,11 @@ class AnomaliaItem(MethodResource, Resource):
         except OperationalError:
             abort(500, message="Erro interno do servidor.")
 
-    def delete(self, anomalia_id):
+    def delete(self, evento_id):
         try:
-            anomalia = self.__service.delete(anomalia_id)
-            if not anomalia:
-                abort(404, message="Anomalia não encontrada.")
-            return {"message": "Anomalia excluída com sucesso."}, 200
+            evento = self.__service.delete(evento_id)
+            if not evento:
+                abort(404, message="Evento não encontrado.")
+            return {"message": "Evento excluído com sucesso."}, 200
         except OperationalError:
             abort(500, message="Erro interno do servidor.")

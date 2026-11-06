@@ -1,30 +1,35 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, Float, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from entities.Base import db
 
 
 # Classe que mapeia a tabela "leitura".
-# Representa uma medição coletada por um sensor em um determinado instante.
+# Representa um "frame" de telemetria OBD-II: todos os parâmetros coletados
+# em um mesmo instante, já padronizados para os nomes canônicos.
 #
-# A restrição UNIQUE (sensor_id, valor, data_hora) implementa a regra de negócio
-# de não considerar como nova leitura duas medições iguais do mesmo sensor
-# com o mesmo valor e o mesmo instante de coleta.
+# A restrição UNIQUE (veiculo_id, data_hora) implementa a regra de negócio
+# de não registrar duas vezes o mesmo instante de um veículo.
 class Leitura(db.Model):
     __tablename__ = "leitura"
     __table_args__ = (
-        UniqueConstraint("sensor_id", "valor", "data_hora", name="uq_leitura_sensor_valor_data"),
+        UniqueConstraint("veiculo_id", "data_hora", name="uq_leitura_veiculo_data"),
     )
 
     id = Column("id_leitura", Integer, primary_key=True)
-    sensor_id = Column("sensor_id", Integer, ForeignKey("sensor.id_sensor"), nullable=False)
-    valor = Column("valor", Float, nullable=False)
+    veiculo_id = Column("veiculo_id", Integer, ForeignKey("veiculo.id_veiculo"), nullable=False)
     data_hora = Column("data_hora", DateTime, nullable=False)
-    # Classificação atribuída pelo modelo de Machine Learning: "NORMAL" ou "ANOMALO".
-    classificacao = Column("classificacao", String(20))
 
-    # Relacionamento N:1 -> uma leitura pertence a um único sensor.
-    sensor = relationship("Sensor", backref="leituras")
+    velocidade = Column("velocidade", Float)
+    rpm = Column("rpm", Float)
+    accel_x = Column("accel_x", Float)
+    accel_y = Column("accel_y", Float)
+    accel_z = Column("accel_z", Float)
+    posicao_acelerador = Column("posicao_acelerador", Float)
+    latitude = Column("latitude", Float)
+    longitude = Column("longitude", Float)
+
+    veiculo = relationship("Veiculo", backref="leituras")
 
     def __repr__(self):
-        return f"<Leitura id={self.id} sensor={self.sensor_id} valor={self.valor}>"
+        return f"<Leitura id={self.id} veiculo={self.veiculo_id} data_hora={self.data_hora}>"

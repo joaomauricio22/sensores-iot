@@ -1,8 +1,9 @@
 # Importa todas as entidades para que o SQLAlchemy registre
 # os modelos no metadata (necessário para refletir/criar as tabelas).
-from entities.TipoSensor import TipoSensor
-from entities.Sensor import Sensor
+from entities.Veiculo import Veiculo
+from entities.Parametro import Parametro
+from entities.MapeamentoParametro import MapeamentoParametro
 from entities.Leitura import Leitura
-from entities.Anomalia import Anomalia
+from entities.EventoRisco import EventoRisco
 
-__all__ = ["TipoSensor", "Sensor", "Leitura", "Anomalia"]
+__all__ = ["Veiculo", "Parametro", "MapeamentoParametro", "Leitura", "EventoRisco"]

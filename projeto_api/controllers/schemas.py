@@ -4,65 +4,89 @@
 from marshmallow import Schema, fields
 
 
-class TipoSensorResponseSchema(Schema):
-    id = fields.Int()
-    nome = fields.Str()
-    unidade = fields.Str()
-    descricao = fields.Str()
-
-
-class TipoSensorRequestSchema(Schema):
-    nome = fields.Str(required=True)
-    unidade = fields.Str(required=True)
-    descricao = fields.Str(allow_none=True)
-
-
-class SensorResponseSchema(Schema):
+class VeiculoResponseSchema(Schema):
     id = fields.Int()
     identificador = fields.Str()
-    nome = fields.Str()
-    tipo_sensor_id = fields.Int()
-    limite_min = fields.Float()
-    limite_max = fields.Float()
+    modelo = fields.Str(allow_none=True)
     data_cadastro = fields.DateTime()
 
 
-class SensorRequestSchema(Schema):
+class VeiculoRequestSchema(Schema):
     identificador = fields.Str(required=True)
-    nome = fields.Str(allow_none=True)
-    tipo_sensor_id = fields.Int(required=True)
+    modelo = fields.Str(allow_none=True)
+
+
+class ParametroResponseSchema(Schema):
+    id = fields.Int()
+    nome = fields.Str()
+    unidade = fields.Str()
+    limite_min = fields.Float()
+    limite_max = fields.Float()
+
+
+class ParametroRequestSchema(Schema):
+    nome = fields.Str(required=True)
+    unidade = fields.Str(required=True)
     limite_min = fields.Float(required=True)
     limite_max = fields.Float(required=True)
 
 
+class MapeamentoResponseSchema(Schema):
+    id = fields.Int()
+    nome_bruto = fields.Str()
+    parametro_id = fields.Int()
+
+
+class MapeamentoRequestSchema(Schema):
+    nome_bruto = fields.Str(required=True)
+    parametro_id = fields.Int(required=True)
+
+
 class LeituraResponseSchema(Schema):
     id = fields.Int()
-    sensor_id = fields.Int()
-    valor = fields.Float()
+    veiculo_id = fields.Int()
     data_hora = fields.DateTime()
-    classificacao = fields.Str(allow_none=True)
+    velocidade = fields.Float(allow_none=True)
+    rpm = fields.Float(allow_none=True)
+    accel_x = fields.Float(allow_none=True)
+    accel_y = fields.Float(allow_none=True)
+    accel_z = fields.Float(allow_none=True)
+    posicao_acelerador = fields.Float(allow_none=True)
+    latitude = fields.Float(allow_none=True)
+    longitude = fields.Float(allow_none=True)
 
 
 class LeituraRequestSchema(Schema):
-    sensor_id = fields.Int(required=True)
-    valor = fields.Float(required=True)
+    veiculo_id = fields.Int(required=True)
     data_hora = fields.DateTime(required=True)
+    velocidade = fields.Float(allow_none=True)
+    rpm = fields.Float(allow_none=True)
+    accel_x = fields.Float(allow_none=True)
+    accel_y = fields.Float(allow_none=True)
+    accel_z = fields.Float(allow_none=True)
+    posicao_acelerador = fields.Float(allow_none=True)
+    latitude = fields.Float(allow_none=True)
+    longitude = fields.Float(allow_none=True)
 
 
-class AnomaliaResponseSchema(Schema):
+class EventoRiscoResponseSchema(Schema):
     id = fields.Int()
     leitura_id = fields.Int()
-    sensor_id = fields.Int()
-    valor = fields.Float()
-    data_hora = fields.DateTime()
+    veiculo_id = fields.Int()
+    forca_g = fields.Float(allow_none=True)
+    instabilidade = fields.Float(allow_none=True)
+    classificacao = fields.Str(allow_none=True)
     metodo = fields.Str()
+    data_hora = fields.DateTime()
     descricao = fields.Str(allow_none=True)
 
 
-class AnomaliaRequestSchema(Schema):
+class EventoRiscoRequestSchema(Schema):
     leitura_id = fields.Int(required=True)
-    sensor_id = fields.Int(required=True)
-    valor = fields.Float(required=True)
+    veiculo_id = fields.Int(required=True)
     data_hora = fields.DateTime(required=True)
     metodo = fields.Str(required=True)
+    forca_g = fields.Float(allow_none=True)
+    instabilidade = fields.Float(allow_none=True)
+    classificacao = fields.Str(allow_none=True)
     descricao = fields.Str(allow_none=True)

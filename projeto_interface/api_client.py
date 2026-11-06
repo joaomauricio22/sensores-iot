@@ -25,7 +25,6 @@ def extract_error(response) -> str:
 
 
 def _format_errors(errors) -> str:
-    """Transforma estruturas de erro (dict/list) em texto legível."""
     if isinstance(errors, dict):
         partes = []
         for campo, msgs in errors.items():
@@ -40,7 +39,7 @@ def _format_errors(errors) -> str:
 
 class ApiClient:
 
-    BASE_URL = "http://localhost:8080/iot"
+    BASE_URL = "http://localhost:8080/telemetria"
 
     def __init__(self, base_url: str = None):
         self.__base_url = base_url or self.BASE_URL
@@ -70,11 +69,8 @@ class ApiClient:
         return requests.delete(self._url(resource, resource_id))
 
     # Endpoints de análise
-    def analisar_leitura(self, leitura_id):
-        return requests.post(self._url("leituras", leitura_id, "analisar"))
+    def analisar_veiculo(self, veiculo_id):
+        return requests.post(self._url("veiculos", veiculo_id, "analisar"))
 
-    def classificar_leitura(self, leitura_id):
-        return requests.post(self._url("leituras", leitura_id, "classificar"))
-
-    def estatisticas_sensor(self, sensor_id):
-        return requests.get(self._url("sensores", sensor_id, "estatisticas"))
+    def estatisticas_veiculo(self, veiculo_id):
+        return requests.get(self._url("veiculos", veiculo_id, "estatisticas"))

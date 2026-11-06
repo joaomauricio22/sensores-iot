@@ -15,10 +15,10 @@ from api_client import extract_error
 class CrudTab(tk.Frame):
     """Estrutura comum: formulário (ID + campos), botões e tabela de registros."""
 
-    RESOURCE = ""        # caminho da API (ex.: "tipos-sensor")
+    RESOURCE = ""        # caminho da API (ex.: "veiculos")
     TITLE = ""           # título exibido na tela
     FIELDS = []          # [{"key", "label", "required"}]
-    COLUMNS = []         # [("key", "label", width)]
+    COLUMNS = []         # [("key", "label", "width")]
 
     BG = "#f5f6fa"
 
@@ -35,7 +35,6 @@ class CrudTab(tk.Frame):
         tk.Label(self, text=self.TITLE, font=("Segoe UI", 20, "bold"),
                  bg=self.BG, fg="#2d3436").pack(pady=(15, 10))
 
-        # ---- Formulário ----
         form = tk.Frame(self, bg=self.BG)
         form.pack(fill="x", padx=20)
 
@@ -46,7 +45,6 @@ class CrudTab(tk.Frame):
             self.entries[field["key"]] = self._field(form, row, field["label"] + ":")
             row += 1
 
-        # ---- Botões ----
         btns = tk.Frame(self, bg=self.BG)
         btns.pack(pady=10)
         self._button(btns, "Cadastrar", "#0984e3", self.cadastrar)
@@ -57,7 +55,6 @@ class CrudTab(tk.Frame):
         self._button(btns, "Atualizar", "#00b894", self.atualizar)
         self._extra_buttons(btns)
 
-        # ---- Tabela ----
         self._build_tree()
 
     def _field(self, parent, row, label_text):
@@ -93,7 +90,6 @@ class CrudTab(tk.Frame):
         frame.rowconfigure(0, weight=1)
         frame.columnconfigure(0, weight=1)
 
-        # Ao clicar numa linha, preenche o formulário (facilita editar/excluir).
         self.tree.bind("<<TreeviewSelect>>", self._on_select)
 
     def _extra_buttons(self, parent):
@@ -242,134 +238,135 @@ class CrudTab(tk.Frame):
 # Telas específicas
 # ======================================================================
 
-class TipoSensorTab(CrudTab):
-    RESOURCE = "tipos-sensor"
-    TITLE = "Tipos de Sensor"
+class VeiculoTab(CrudTab):
+    RESOURCE = "veiculos"
+    TITLE = "Veículos"
     FIELDS = [
-        {"key": "nome", "label": "Nome", "required": True},
-        {"key": "unidade", "label": "Unidade", "required": True},
-        {"key": "descricao", "label": "Descrição", "required": False},
+        {"key": "identificador", "label": "Identificador (placa)", "required": True},
+        {"key": "modelo", "label": "Modelo", "required": False},
     ]
     COLUMNS = [
         ("id", "ID", 60),
-        ("nome", "Nome", 140),
-        ("unidade", "Unidade", 80),
-        ("descricao", "Descrição", 220),
-    ]
-
-
-class SensorTab(CrudTab):
-    RESOURCE = "sensores"
-    TITLE = "Sensores"
-    FIELDS = [
-        {"key": "identificador", "label": "Identificador", "required": True},
-        {"key": "nome", "label": "Nome", "required": False},
-        {"key": "tipo_sensor_id", "label": "ID do Tipo", "required": True},
-        {"key": "limite_min", "label": "Limite Mínimo", "required": True},
-        {"key": "limite_max", "label": "Limite Máximo", "required": True},
-    ]
-    COLUMNS = [
-        ("id", "ID", 60),
-        ("identificador", "Identificador", 130),
-        ("nome", "Nome", 130),
-        ("tipo_sensor_id", "Tipo", 60),
-        ("limite_min", "Mín", 70),
-        ("limite_max", "Máx", 70),
-        ("data_cadastro", "Cadastro", 160),
+        ("identificador", "Identificador", 140),
+        ("modelo", "Modelo", 140),
+        ("data_cadastro", "Cadastro", 170),
     ]
 
     def _extra_buttons(self, parent):
         self._button(parent, "Estatísticas", "#f39c12", self.ver_estatisticas)
+        self._button(parent, "Detectar Riscos", "#d63031", self.analisar)
 
     def ver_estatisticas(self):
-        sensor_id = self._get_id()
-        if sensor_id is None:
+        veiculo_id = self._get_id()
+        if veiculo_id is None:
             return
-        resp = self._safe_call(lambda: self.api.estatisticas_sensor(sensor_id))
+        resp = self._safe_call(lambda: self.api.estatisticas_veiculo(veiculo_id))
         if resp is None:
             return
         if resp.status_code == 200:
             dados = resp.json()
             linhas = [f"{chave}: {valor}" for chave, valor in dados.items()]
-            messagebox.showinfo("Estatísticas do Sensor", "\n".join(linhas))
+            messagebox.showinfo("Estatísticas do Veículo", "\n".join(linhas))
         else:
             messagebox.showerror("Erro", extract_error(resp))
+
+    def analisar(self):
+        veiculo_id = self._get_id()
+        if veiculo_id is None:
+            return
+        resp = self._safe_call(lambda: self.api.analisar_veiculo(veiculo_id))
+        if resp is None:
+            return
+        if resp.status_code == 200:
+            eventos = resp.json()
+            if eventos:
+                messagebox.showwarning(
+                    "Eventos de risco",
+                    f"{len(eventos)} novo(s) evento(s) de risco detectado(s).",
+                )
+            else:
+                messagebox.showinfo("Resultado", "Nenhum novo evento de risco detectado.")
+        else:
+            messagebox.showerror("Erro", extract_error(resp))
+
+
+class ParametroTab(CrudTab):
+    RESOURCE = "parametros"
+    TITLE = "Parâmetros"
+    FIELDS = [
+        {"key": "nome", "label": "Nome (canônico)", "required": True},
+        {"key": "unidade", "label": "Unidade", "required": True},
+        {"key": "limite_min", "label": "Limite Mínimo", "required": True},
+        {"key": "limite_max", "label": "Limite Máximo", "required": True},
+    ]
+    COLUMNS = [
+        ("id", "ID", 60),
+        ("nome", "Nome", 160),
+        ("unidade", "Unidade", 90),
+        ("limite_min", "Mín", 90),
+        ("limite_max", "Máx", 90),
+    ]
+
+
+class MapeamentoTab(CrudTab):
+    RESOURCE = "mapeamentos"
+    TITLE = "Mapeamentos (padronização)"
+    FIELDS = [
+        {"key": "nome_bruto", "label": "Nome bruto (coluna)", "required": True},
+        {"key": "parametro_id", "label": "ID do parâmetro", "required": True},
+    ]
+    COLUMNS = [
+        ("id", "ID", 60),
+        ("nome_bruto", "Nome bruto", 260),
+        ("parametro_id", "Parâmetro", 110),
+    ]
 
 
 class LeituraTab(CrudTab):
     RESOURCE = "leituras"
-    TITLE = "Leituras"
+    TITLE = "Leituras (frames de telemetria)"
     FIELDS = [
-        {"key": "sensor_id", "label": "ID do Sensor", "required": True},
-        {"key": "valor", "label": "Valor", "required": True},
+        {"key": "veiculo_id", "label": "ID do veículo", "required": True},
         {"key": "data_hora", "label": "Data/Hora (AAAA-MM-DDTHH:MM:SS)", "required": True},
+        {"key": "velocidade", "label": "Velocidade", "required": False},
+        {"key": "rpm", "label": "RPM", "required": False},
+        {"key": "accel_x", "label": "Aceleração X", "required": False},
+        {"key": "accel_y", "label": "Aceleração Y", "required": False},
+        {"key": "accel_z", "label": "Aceleração Z", "required": False},
+        {"key": "posicao_acelerador", "label": "Posição acelerador", "required": False},
+        {"key": "latitude", "label": "Latitude", "required": False},
+        {"key": "longitude", "label": "Longitude", "required": False},
     ]
     COLUMNS = [
-        ("id", "ID", 60),
-        ("sensor_id", "Sensor", 70),
-        ("valor", "Valor", 90),
-        ("data_hora", "Data/Hora", 180),
-        ("classificacao", "Classificação", 110),
+        ("id", "ID", 55),
+        ("veiculo_id", "Veíc.", 60),
+        ("data_hora", "Data/Hora", 170),
+        ("velocidade", "Vel.", 70),
+        ("rpm", "RPM", 80),
+        ("accel_x", "AX", 70),
+        ("accel_y", "AY", 70),
+        ("accel_z", "AZ", 70),
     ]
 
-    def _extra_buttons(self, parent):
-        self._button(parent, "Detectar Anomalias", "#d63031", self.detectar_anomalias)
-        self._button(parent, "Classificar (ML)", "#0984e3", self.classificar_ml)
 
-    def detectar_anomalias(self):
-        leitura_id = self._get_id()
-        if leitura_id is None:
-            return
-        resp = self._safe_call(lambda: self.api.analisar_leitura(leitura_id))
-        if resp is None:
-            return
-        if resp.status_code == 200:
-            anomalias = resp.json()
-            if anomalias:
-                linhas = []
-                for a in anomalias:
-                    linhas.append(f"Método {a.get('metodo')} - valor {a.get('valor')}")
-                messagebox.showwarning("Anomalias detectadas", "\n".join(linhas))
-            else:
-                messagebox.showinfo("Resultado", "Nenhuma anomalia detectada.")
-        else:
-            messagebox.showerror("Erro", extract_error(resp))
-
-    def classificar_ml(self):
-        leitura_id = self._get_id()
-        if leitura_id is None:
-            return
-        resp = self._safe_call(lambda: self.api.classificar_leitura(leitura_id))
-        if resp is None:
-            return
-        if resp.status_code == 200:
-            dados = resp.json()
-            messagebox.showinfo(
-                "Classificação",
-                f"Leitura {dados.get('id')}: {dados.get('classificacao')}",
-            )
-            self.atualizar()
-        else:
-            messagebox.showerror("Erro", extract_error(resp))
-
-
-class AnomaliaTab(CrudTab):
-    RESOURCE = "anomalias"
-    TITLE = "Anomalias"
+class EventoRiscoTab(CrudTab):
+    RESOURCE = "eventos-risco"
+    TITLE = "Eventos de Risco"
     FIELDS = [
-        {"key": "leitura_id", "label": "ID da Leitura", "required": True},
-        {"key": "sensor_id", "label": "ID do Sensor", "required": True},
-        {"key": "valor", "label": "Valor", "required": True},
+        {"key": "leitura_id", "label": "ID da leitura", "required": True},
+        {"key": "veiculo_id", "label": "ID do veículo", "required": True},
         {"key": "data_hora", "label": "Data/Hora (AAAA-MM-DDTHH:MM:SS)", "required": True},
         {"key": "metodo", "label": "Método", "required": True},
+        {"key": "forca_g", "label": "Força G", "required": False},
+        {"key": "instabilidade", "label": "Instabilidade", "required": False},
+        {"key": "classificacao", "label": "Classificação", "required": False},
         {"key": "descricao", "label": "Descrição", "required": False},
     ]
     COLUMNS = [
-        ("id", "ID", 60),
-        ("leitura_id", "Leitura", 70),
-        ("sensor_id", "Sensor", 70),
-        ("valor", "Valor", 90),
-        ("data_hora", "Data/Hora", 180),
+        ("id", "ID", 55),
+        ("veiculo_id", "Veíc.", 60),
+        ("data_hora", "Data/Hora", 170),
         ("metodo", "Método", 110),
-        ("descricao", "Descrição", 220),
+        ("forca_g", "Força G", 90),
+        ("classificacao", "Classif.", 100),
     ]

@@ -1,88 +1,87 @@
-"""Script de carga de dados de exemplo.
+"""Seed do sistema de telemetria veicular.
 
-Popula o banco com tipos de sensor, sensores e leituras (normais e anômalas)
-para facilitar os testes e a demonstração da detecção de anomalias.
+Cria os parâmetros canônicos, os mapeamentos de padronização e importa
+os arquivos CSV reais de telemetria OBD-II.
 
-Executar (com a API e o banco configurados):  python seed.py
+Executar:  python seed.py
 """
-from datetime import datetime, timedelta
-
 from sqlalchemy import text
 
 from app import app
 from entities.Base import db
-from entities.Leitura import Leitura
-from entities.Sensor import Sensor
-from entities.TipoSensor import TipoSensor
+from entities.MapeamentoParametro import MapeamentoParametro
+from entities.Parametro import Parametro
+from repositories.MapeamentoParametroRepository import MapeamentoParametroRepository
+from repositories.ParametroRepository import ParametroRepository
+from services.ImportadorService import ImportadorService
 
+# Parâmetros canônicos (apenas os que agregam valor à análise de risco).
+PARAMETROS = [
+    ("velocidade", "km/h", 0.0, 220.0),
+    ("rpm", "RPM", 0.0, 8000.0),
+    ("accel_x", "m/s²", -30.0, 30.0),
+    ("accel_y", "m/s²", -30.0, 30.0),
+    ("accel_z", "m/s²", -30.0, 30.0),
+    ("posicao_acelerador", "%", 0.0, 100.0),
+    ("latitude", "deg", -90.0, 90.0),
+    ("longitude", "deg", -180.0, 180.0),
+]
 
-def limpar():
-    """Remove os dados existentes e reinicia as sequências (IDs voltam a 1)."""
-    db.session.execute(
-        text("TRUNCATE TABLE anomalia, leitura, sensor, tipo_sensor RESTART IDENTITY CASCADE")
-    )
-    db.session.commit()
+# Padronização: nome bruto (do arquivo) -> parâmetro canônico.
+MAPEAMENTOS = [
+    ("Velocidade do veículo (km/h)", "velocidade"),
+    ("Vehicle speed (km/h)", "velocidade"),
+    ("RPM do motor (RPM)", "rpm"),
+    ("Engine RPM (RPM)", "rpm"),
+    ("Aceleração X (m/s²)", "accel_x"),
+    ("Accel X (m/s²)", "accel_x"),
+    ("Acelere Y (m/s²)", "accel_y"),
+    ("Accel Y (m/s²)", "accel_y"),
+    ("Aceleração Z (m/s²)", "accel_z"),
+    ("Accel Z (m/s²)", "accel_z"),
+    ("Posição absoluta do acelerador (%)", "posicao_acelerador"),
+    ("Absolute throttle position (%)", "posicao_acelerador"),
+    ("Latitude (deg)", "latitude"),
+    ("Longitude (deg)", "longitude"),
+]
+
+# Arquivos CSV -> (identificador do veículo, modelo).
+ARQUIVOS = [
+    (r"C:\Users\jo22m\Documents\Inmetro\Dados OBD\CSVLog_20260121_084120.csv", "VEICULO-001", "CSVLog"),
+    (r"C:\Users\jo22m\Documents\Inmetro\Dados OBD\CSVLog_20260121_085814.csv", "VEICULO-002", "CSVLog"),
+    (r"C:\Users\jo22m\Documents\Inmetro\Dados OBD\CSVLog_20260121_152135.csv", "VEICULO-003", "CSVLog"),
+    (r"C:\Users\jo22m\Documents\Inmetro\Dados OBD\OBDLink.csv", "VEICULO-004", "OBDLink"),
+]
 
 
 def seed():
     with app.app_context():
-        limpar()
-
-        # ---- Tipos de sensor ----
-        t_temp = TipoSensor(nome="Temperatura", unidade="°C", descricao="Temperatura ambiente")
-        t_umid = TipoSensor(nome="Umidade", unidade="%", descricao="Umidade relativa do ar")
-        db.session.add_all([t_temp, t_umid])
+        # Limpa tudo (respeitando a ordem das FKs) e reinicia as sequências.
+        db.session.execute(text(
+            "TRUNCATE TABLE evento_risco, leitura, mapeamento_parametro, parametro, veiculo "
+            "RESTART IDENTITY CASCADE"
+        ))
         db.session.commit()
 
-        # ---- Sensores ----
-        s_temp = Sensor(
-            identificador="SENSOR-001", nome="Sensor Temperatura - Sala A",
-            tipo_sensor_id=t_temp.id, limite_min=10.0, limite_max=40.0,
-        )
-        s_umid = Sensor(
-            identificador="SENSOR-002", nome="Sensor Umidade - Sala A",
-            tipo_sensor_id=t_umid.id, limite_min=20.0, limite_max=80.0,
-        )
-        db.session.add_all([s_temp, s_umid])
-        db.session.commit()
+        param_repo = ParametroRepository()
+        ids = {}
+        for nome, unidade, lmin, lmax in PARAMETROS:
+            p = param_repo.add(Parametro(nome=nome, unidade=unidade, limite_min=lmin, limite_max=lmax))
+            ids[nome] = p.id
 
-        agora = datetime.now()
+        map_repo = MapeamentoParametroRepository()
+        for nome_bruto, parametro in MAPEAMENTOS:
+            map_repo.add(MapeamentoParametro(nome_bruto=nome_bruto, parametro_id=ids[parametro]))
 
-        # ---- Leituras normais (temperatura ~ 25°C) ----
-        for i in range(30):
-            valor = 25.0 + ((i % 7) - 3) * 0.6  # variação suave em torno de 25
-            db.session.add(Leitura(
-                sensor_id=s_temp.id, valor=round(valor, 2),
-                data_hora=agora - timedelta(minutes=(30 - i) * 10),
-            ))
+        importador = ImportadorService()
+        for caminho, identificador, modelo in ARQUIVOS:
+            resultado = importador.importar_csv(caminho, identificador, modelo)
+            print(f"{identificador}: {resultado['total_importadas']} leituras importadas.")
 
-        # ---- Leituras normais (umidade ~ 55%) ----
-        for i in range(20):
-            valor = 55.0 + ((i % 5) - 2) * 1.5
-            db.session.add(Leitura(
-                sensor_id=s_umid.id, valor=round(valor, 2),
-                data_hora=agora - timedelta(minutes=(20 - i) * 10),
-            ))
-
-        # ---- Leituras anômalas (para demonstrar a detecção) ----
-        db.session.add(Leitura(
-            sensor_id=s_temp.id, valor=75.0,  # muito acima do limite máximo (40)
-            data_hora=agora + timedelta(minutes=5),
-        ))
-        db.session.add(Leitura(
-            sensor_id=s_temp.id, valor=-5.0,  # abaixo do limite mínimo (10)
-            data_hora=agora + timedelta(minutes=6),
-        ))
-        db.session.add(Leitura(
-            sensor_id=s_umid.id, valor=99.0,  # acima do limite máximo (80)
-            data_hora=agora + timedelta(minutes=5),
-        ))
-
-        db.session.commit()
-
-        total_leituras = db.session.query(Leitura).count()
-        total_sensores = db.session.query(Sensor).count()
-        print(f"Seed concluído: {total_sensores} sensores, {total_leituras} leituras.")
+        from entities.Leitura import Leitura
+        from entities.Veiculo import Veiculo
+        print(f"Total: {db.session.query(Veiculo).count()} veículos, "
+              f"{db.session.query(Leitura).count()} leituras.")
 
 
 if __name__ == "__main__":

@@ -4,15 +4,15 @@ from marshmallow import ValidationError
 
 from entities.Leitura import Leitura
 from repositories.LeituraRepository import LeituraRepository
-from repositories.SensorRepository import SensorRepository
+from repositories.VeiculoRepository import VeiculoRepository
 
 
-# Camada de serviço: implementa as regras de negócio da Leitura.
+# Camada de serviço: regras de negócio da Leitura (frame de telemetria).
 class LeituraService:
 
     def __init__(self):
         self.__repository = LeituraRepository()
-        self.__sensor_repository = SensorRepository()
+        self.__veiculo_repository = VeiculoRepository()
 
     def get_all(self):
         return self.__repository.get_all()
@@ -20,34 +20,67 @@ class LeituraService:
     def get_by_id(self, leitura_id):
         return self.__repository.get_by_id(leitura_id)
 
-    def add(self, sensor_id: int, valor, data_hora) -> Leitura:
-        valor = self.__validar(sensor_id, valor, data_hora)
+    def add(self, veiculo_id: int, data_hora, velocidade=None, rpm=None,
+            accel_x=None, accel_y=None, accel_z=None, posicao_acelerador=None,
+            latitude=None, longitude=None) -> Leitura:
+        # Regra 2: dados obrigatórios (veículo e data/hora).
+        if veiculo_id is None:
+            raise ValidationError("O veículo é obrigatório.")
+        if data_hora is None:
+            raise ValidationError("A data/hora da coleta é obrigatória.")
 
-        # Regra 5: não aceitar leitura duplicada (mesmo sensor, valor e instante).
-        if self.__repository.find_duplicada(sensor_id, valor, data_hora):
-            raise ValidationError(
-                "Já existe uma leitura idêntica para este sensor (mesmo valor e instante)."
-            )
+        # Regra 3: veículo cadastrado.
+        if self.__veiculo_repository.get_by_id(veiculo_id) is None:
+            raise ValidationError("Não é possível registrar leitura para um veículo não cadastrado.")
 
-        leitura = Leitura(sensor_id=sensor_id, valor=valor, data_hora=data_hora)
+        # Regra 4: valores numéricos e finitos.
+        valores = {
+            "velocidade": self.__validar_numero(velocidade, "velocidade"),
+            "rpm": self.__validar_numero(rpm, "rpm"),
+            "accel_x": self.__validar_numero(accel_x, "accel_x"),
+            "accel_y": self.__validar_numero(accel_y, "accel_y"),
+            "accel_z": self.__validar_numero(accel_z, "accel_z"),
+            "posicao_acelerador": self.__validar_numero(posicao_acelerador, "posição do acelerador"),
+            "latitude": self.__validar_numero(latitude, "latitude"),
+            "longitude": self.__validar_numero(longitude, "longitude"),
+        }
+
+        # Regra 5: sem frames duplicados (mesmo veículo + instante).
+        if self.__repository.find_duplicada(veiculo_id, data_hora):
+            raise ValidationError("Já existe uma leitura para este veículo nesse instante.")
+
+        leitura = Leitura(veiculo_id=veiculo_id, data_hora=data_hora, **valores)
         return self.__repository.add(leitura)
 
-    def update(self, leitura_id: int, sensor_id: int, valor, data_hora):
+    def update(self, leitura_id: int, veiculo_id: int, data_hora, velocidade=None,
+               rpm=None, accel_x=None, accel_y=None, accel_z=None,
+               posicao_acelerador=None, latitude=None, longitude=None):
         leitura = self.__repository.get_by_id(leitura_id)
         if not leitura:
             return None
 
-        valor = self.__validar(sensor_id, valor, data_hora)
+        if self.__veiculo_repository.get_by_id(veiculo_id) is None:
+            raise ValidationError("Não é possível registrar leitura para um veículo não cadastrado.")
 
-        duplicada = self.__repository.find_duplicada(sensor_id, valor, data_hora)
+        valores = {
+            "velocidade": self.__validar_numero(velocidade, "velocidade"),
+            "rpm": self.__validar_numero(rpm, "rpm"),
+            "accel_x": self.__validar_numero(accel_x, "accel_x"),
+            "accel_y": self.__validar_numero(accel_y, "accel_y"),
+            "accel_z": self.__validar_numero(accel_z, "accel_z"),
+            "posicao_acelerador": self.__validar_numero(posicao_acelerador, "posição do acelerador"),
+            "latitude": self.__validar_numero(latitude, "latitude"),
+            "longitude": self.__validar_numero(longitude, "longitude"),
+        }
+
+        duplicada = self.__repository.find_duplicada(veiculo_id, data_hora)
         if duplicada and duplicada.id != leitura.id:
-            raise ValidationError(
-                "Já existe uma leitura idêntica para este sensor (mesmo valor e instante)."
-            )
+            raise ValidationError("Já existe uma leitura para este veículo nesse instante.")
 
-        leitura.sensor_id = sensor_id
-        leitura.valor = valor
+        leitura.veiculo_id = veiculo_id
         leitura.data_hora = data_hora
+        for campo, valor in valores.items():
+            setattr(leitura, campo, valor)
         return self.__repository.update(leitura)
 
     def delete(self, leitura_id: int):
@@ -56,28 +89,13 @@ class LeituraService:
             return None
         return self.__repository.delete(leitura)
 
-    # Validações comuns a cadastro e edição.
-    def __validar(self, sensor_id: int, valor, data_hora) -> float:
-        # Regra 2: dados obrigatórios.
-        if sensor_id is None:
-            raise ValidationError("O sensor é obrigatório.")
+    def __validar_numero(self, valor, nome) -> float:
         if valor is None:
-            raise ValidationError("O valor medido é obrigatório.")
-        if data_hora is None:
-            raise ValidationError("A data/hora da coleta é obrigatória.")
-
-        # Regra 4: o valor deve ser numérico e finito.
+            return None
         try:
             valor = float(valor)
         except (TypeError, ValueError):
-            raise ValidationError("O valor medido deve ser numérico.")
+            raise ValidationError(f"O valor de {nome} deve ser numérico.")
         if not math.isfinite(valor):
-            raise ValidationError("O valor medido deve ser um número finito.")
-
-        # Regra 3: o sensor deve estar cadastrado.
-        if self.__sensor_repository.get_by_id(sensor_id) is None:
-            raise ValidationError(
-                "Não é possível registrar leitura para um sensor não cadastrado."
-            )
-
+            raise ValidationError(f"O valor de {nome} deve ser um número finito.")
         return valor
