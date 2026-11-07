@@ -5,8 +5,7 @@ coletados via interface **OBD-II**, identificando **eventos de condução de ris
 (frenagens bruscas, acelerações intensas, curvas fechadas).
 
 O pipeline de análise integra aprendizagem **não supervisionada (DBSCAN)** e
-**supervisionada (RandomForest)**, inspirado em pesquisa de Iniciação Científica
-desenvolvida no INMETRO.
+**supervisionada (RandomForest)**.
 
 - **Aluno:** João Maurício Araújo Leitão
 - **Modalidade:** Individual
@@ -67,16 +66,19 @@ nome bruto para um parâmetro canônico; colunas não mapeadas são ignoradas na
 
 ## Regras de negócio (10)
 
-1. Veículo com identificador único.
-2. Leitura (frame) exige veículo e data/hora.
-3. Leitura apenas para veículo cadastrado.
-4. Valores numéricos e finitos.
-5. Sem frames duplicados (mesmo veículo + instante).
-6. Limites de referência por parâmetro.
-7. Evento de risco = Força G acima do limiar **ou** desvio do histórico.
-8. Classificação pelo modelo de ML.
-9. Registro do evento (veículo, valores, data/hora, método).
-10. Análise histórica (estatísticas de condução).
+> Neste domínio, cada **sensor** corresponde a um canal de medição do veículo
+> (velocidade, RPM, aceleração X/Y/Z), e cada **leitura** é um frame de telemetria.
+
+1. **Identificação do sensor:** cada sensor deve possuir um identificador único no sistema.
+2. **Dados obrigatórios da leitura:** uma leitura só poderá ser registrada se possuir sensor, valor medido e data/hora da coleta.
+3. **Sensor cadastrado:** o sistema não deve permitir o registro de uma leitura associada a um sensor que não esteja cadastrado.
+4. **Valores válidos:** o sistema não deve armazenar leituras com valores que não sejam numéricos ou que estejam incompatíveis com o tipo de dado produzido pelo sensor.
+5. **Leituras duplicadas:** o sistema não deve considerar como nova leitura duas medições do mesmo sensor com o mesmo valor e o mesmo instante de coleta.
+6. **Limites de operação:** cada sensor deve possuir limites mínimo e máximo de referência para suas medições, de acordo com seu tipo.
+7. **Identificação de anomalias:** uma leitura que ultrapasse os limites de referência ou apresente comportamento significativamente diferente do padrão histórico deve ser identificada como potencialmente anômala.
+8. **Classificação pelo modelo:** as leituras submetidas ao modelo de Machine Learning devem receber uma classificação indicando comportamento normal ou potencialmente anômalo.
+9. **Registro das anomalias:** toda anomalia identificada deve manter informações sobre o sensor, valor, data/hora e método utilizado para sua identificação.
+10. **Análise histórica:** o sistema deve utilizar dados históricos dos sensores para calcular padrões estatísticos e fornecer informações utilizadas na identificação de comportamentos anormais.
 
 ## Detecção de risco (3 métodos)
 

@@ -18,3 +18,6 @@ drive-download-*/
 
 # Arquivos temporários do Office/PowerPoint
 ~$*
+
+# Dados de telemetria (CSVs locais — não publicar)
+projeto_api/dados/

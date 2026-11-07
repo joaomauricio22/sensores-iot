@@ -187,8 +187,7 @@ _text(s, 7.0, 1.85, 5.7, 5.0,
       "• Rotação do motor (RPM)\n"
       "• Aceleração triaxial (X, Y, Z)\n"
       "• Posição do acelerador\n"
-      "• Localização (GPS)\n\n"
-      "Contexto inspirado em pesquisa de IC no INMETRO.",
+      "• Localização (GPS)",
       size=16, color=TEXT)
 
 # ================================================================ 3. PROBLEMA
@@ -211,16 +210,16 @@ _text(s, 0.6, 5.3, 12.1, 1.3,
 # ================================================================ 4. REQUISITOS
 s = _content_slide(3, "Requisitos Principais — 10 regras de negócio", accent=RED, page=4)
 _regras = [
-    ("Veículo com identificador único.", BLUE),
-    ("Leitura exige veículo e data/hora.", PURPLE),
-    ("Leitura apenas para veículo cadastrado.", TEAL),
-    ("Valores numéricos e finitos.", ORANGE),
-    ("Sem frames duplicados.", RED),
-    ("Limites de referência por parâmetro.", YELLOW),
-    ("Risco: Força G acima do limiar ou desvio do histórico.", RED),
+    ("Cada sensor possui um identificador único.", BLUE),
+    ("Leitura exige sensor, valor e data/hora.", PURPLE),
+    ("Leitura apenas para sensor cadastrado.", TEAL),
+    ("Valores numéricos e compatíveis com o tipo.", ORANGE),
+    ("Sem leituras duplicadas (sensor + valor + instante).", RED),
+    ("Limites mínimo/máximo por tipo de sensor.", YELLOW),
+    ("Anomalia: fora dos limites ou desvio do histórico.", RED),
     ("Classificação pelo modelo de ML.", PURPLE),
-    ("Registro do evento (veículo, valor, data/hora, método).", TEAL),
-    ("Análise histórica (estatísticas de condução).", BLUE),
+    ("Registro da anomalia (sensor, valor, data/hora, método).", TEAL),
+    ("Análise histórica (padrões estatísticos).", BLUE),
 ]
 for i, (regra, cor) in enumerate(_regras):
     col = i // 5

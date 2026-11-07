@@ -5,6 +5,8 @@ os arquivos CSV reais de telemetria OBD-II.
 
 Executar:  python seed.py
 """
+import os
+
 from sqlalchemy import text
 
 from app import app
@@ -46,11 +48,12 @@ MAPEAMENTOS = [
 ]
 
 # Arquivos CSV -> (identificador do veículo, modelo).
+DADOS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dados")
 ARQUIVOS = [
-    (r"C:\Users\jo22m\Documents\Inmetro\Dados OBD\CSVLog_20260121_084120.csv", "VEICULO-001", "CSVLog"),
-    (r"C:\Users\jo22m\Documents\Inmetro\Dados OBD\CSVLog_20260121_085814.csv", "VEICULO-002", "CSVLog"),
-    (r"C:\Users\jo22m\Documents\Inmetro\Dados OBD\CSVLog_20260121_152135.csv", "VEICULO-003", "CSVLog"),
-    (r"C:\Users\jo22m\Documents\Inmetro\Dados OBD\OBDLink.csv", "VEICULO-004", "OBDLink"),
+    (os.path.join(DADOS_DIR, "CSVLog_20260121_084120.csv"), "VEICULO-001", "CSVLog"),
+    (os.path.join(DADOS_DIR, "CSVLog_20260121_085814.csv"), "VEICULO-002", "CSVLog"),
+    (os.path.join(DADOS_DIR, "CSVLog_20260121_152135.csv"), "VEICULO-003", "CSVLog"),
+    (os.path.join(DADOS_DIR, "OBDLink.csv"), "VEICULO-004", "OBDLink"),
 ]
 
 

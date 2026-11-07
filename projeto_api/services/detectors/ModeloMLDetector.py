@@ -8,7 +8,7 @@ from services.features import forca_g, instabilidade_janela
 
 
 # Método 3 - Modelo de Machine Learning (DBSCAN + RandomForest):
-# reproduz o pipeline da Iniciação Científica:
+# combina aprendizado não supervisionado e supervisionado:
 #   1. extrai atributos por leitura (Força G e instabilidade);
 #   2. normaliza com StandardScaler;
 #   3. DBSCAN separa condução normal (cluster denso) de eventos de risco (-1) — pseudo-rótulos;
