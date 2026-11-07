@@ -11,7 +11,15 @@ from tkinter import messagebox, ttk
 import requests
 
 from api_client import ApiClient, extract_error
-from tabs import GraficoTab, RotaTab
+from tabs import (
+    CompararTab,
+    ConfiguracaoTab,
+    DashboardTab,
+    EventosTab,
+    GraficoTab,
+    MapaTab,
+    RotaTab,
+)
 
 
 class CadastroWindow(tk.Toplevel):
@@ -145,27 +153,48 @@ class App:
         self.api = api
         self.rota_atual_id = None
         self.root.title("Telemetria Veicular — Detecção de Eventos de Risco")
-        self.root.geometry("1100x700")
+        self.root.geometry("1200x760")
         self.root.configure(bg="#f5f6fa")
 
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
+
         self.rota_tab = RotaTab(self.notebook, self)
+        self.dashboard_tab = DashboardTab(self.notebook, self)
+        self.eventos_tab = EventosTab(self.notebook, self)
         self.grafico_tab = GraficoTab(self.notebook, self)
+        self.mapa_tab = MapaTab(self.notebook, self)
+        self.comparar_tab = CompararTab(self.notebook, self)
+        self.config_tab = ConfiguracaoTab(self.notebook, self)
+
         self.notebook.add(self.rota_tab, text="Rotas")
+        self.notebook.add(self.dashboard_tab, text="Dashboard")
+        self.notebook.add(self.eventos_tab, text="Eventos")
         self.notebook.add(self.grafico_tab, text="Gráfico")
+        self.notebook.add(self.mapa_tab, text="Mapa")
+        self.notebook.add(self.comparar_tab, text="Comparar")
+        self.notebook.add(self.config_tab, text="Configurações")
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_change)
 
     def _on_tab_change(self, _event):
-        # atualização automática ao trocar de aba.
+        # atualização automática ao trocar de aba (sem botão "Atualizar").
         idx = self.notebook.index(self.notebook.select())
-        if idx == 0:
-            self.rota_tab.atualizar()
-        elif idx == 1:
-            self.grafico_tab.plotar()
+        refrescos = [
+            self.rota_tab.atualizar,
+            self.dashboard_tab.atualizar,
+            self.eventos_tab.atualizar,
+            self.grafico_tab.plotar,
+            self.mapa_tab.atualizar,
+            self.comparar_tab.atualizar,
+            self.config_tab.atualizar,
+        ]
+        if 0 <= idx < len(refrescos):
+            refrescos[idx]()
 
-    def mostrar_grafico(self):
-        self.notebook.select(1)
+    def refresh_detalhes(self):
+        """Atualiza as abas de detalhe da rota selecionada (sem trocar de aba)."""
+        self.dashboard_tab.atualizar()
+        self.eventos_tab.atualizar()
         self.grafico_tab.plotar()
 
 

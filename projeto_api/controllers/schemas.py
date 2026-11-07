@@ -87,3 +87,29 @@ class EventoRiscoRequestSchema(Schema):
     instabilidade = fields.Float(allow_none=True)
     classificacao = fields.Str(allow_none=True)
     descricao = fields.Str(allow_none=True)
+
+
+class ConfiguracaoResponseSchema(Schema):
+    id = fields.Int()
+    chave = fields.Str()
+    valor = fields.Str()
+
+
+class ConfiguracaoRequestSchema(Schema):
+    chave = fields.Str(required=True)
+    valor = fields.Str(required=True)
+
+
+class ConfiguracaoUpdateSchema(Schema):
+    chave = fields.Str(allow_none=True)
+    valor = fields.Str(allow_none=True)
+
+
+class LimiaresRequestSchema(Schema):
+    velocidade_max = fields.Float(allow_none=True)
+    rpm_max = fields.Float(allow_none=True)
+    aceleracao_max = fields.Float(allow_none=True)
+    frenagem_max = fields.Float(allow_none=True)
+    lateral_max = fields.Float(allow_none=True)
+    curva_velocidade_min = fields.Float(allow_none=True)
+    acelerador_delta_max = fields.Float(allow_none=True)

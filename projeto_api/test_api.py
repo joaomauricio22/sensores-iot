@@ -11,34 +11,39 @@ def show(titulo, ok, detalhe=""):
     print(f"[{'OK' if ok else 'FALHOU'}] {titulo}" + (f" -> {detalhe}" if detalhe else ""))
 
 
-# CSV de exemplo (com StartTime e colunas mínimas).
+# CSV de exemplo (com StartTime, colunas mínimas e GPS).
 CSV_EXEMPLO = """# StartTime = 01/21/2026 08:00:00.0000 AM
-Time (sec), Vehicle speed (km/h), Engine RPM (RPM), Accel X (m/s²), Accel Y (m/s²), Accel Z (m/s²)
-0.0, 0, 800, 0.1, 0.1, 0.1
-1.0, 10, 1000, 0.2, 0.1, 0.1
-2.0, 25, 1500, 0.3, 0.2, 0.1
-3.0, 45, 2200, 0.5, 0.3, 0.2
-4.0, 60, 2600, 0.4, 0.2, 0.1
-5.0, 55, 2300, -0.5, -0.2, 0.1
-6.0, 40, 1800, -0.3, -0.1, 0.1
-7.0, 20, 1200, -0.2, 0.0, 0.1
-8.0, 0, 800, 0.0, 0.0, 0.1
+Time (sec), Vehicle speed (km/h), Engine RPM (RPM), Accel X (m/s²), Accel Y (m/s²), Accel Z (m/s²), Absolute throttle position (%), Latitude (deg), Longitude (deg)
+0.0, 0, 800, 0.1, 0.1, 0.1, 5, -22.588833, -43.284300
+1.0, 30, 1500, 0.2, 0.1, 0.1, 10, -22.588900, -43.284300
+2.0, 60, 2500, 0.3, 0.2, 0.1, 20, -22.589000, -43.284300
+3.0, 90, 3500, 0.4, 3.5, 0.2, 30, -22.589100, -43.284300
+4.0, 120, 4500, 0.3, 0.3, 0.2, 40, -22.589200, -43.284300
+5.0, 130, 6000, 0.2, 0.3, 0.2, 60, -22.589300, -43.284300
+6.0, 100, 5000, -0.5, -0.2, 0.1, 40, -22.589400, -43.284300
+7.0, 70, 4000, -0.4, -0.1, 0.1, 30, -22.589500, -43.284300
+8.0, 40, 3000, -0.3, 0.0, 0.1, 20, -22.589600, -43.284300
+9.0, 20, 2000, -0.2, 0.0, 0.1, 10, -22.589700, -43.284300
+10.0, 0, 900, 0.0, 0.0, 0.1, 5, -22.589800, -43.284300
 """
 
 
 def main():
     # ---- Cadastro e login ----
     r = requests.post(f"{BASE}/usuarios", json={"nome": "teste_api", "senha": "123"})
+    show("POST usuário senha curta (400)", r.status_code == 400, f"{r.status_code}")
+
+    r = requests.post(f"{BASE}/usuarios", json={"nome": "teste_api", "senha": "123456"})
     show("POST usuário (201)", r.status_code == 201, f"{r.status_code}")
     usuario_id = r.json().get("id") if r.status_code == 201 else None
 
-    r = requests.post(f"{BASE}/usuarios", json={"nome": "teste_api", "senha": "123"})
+    r = requests.post(f"{BASE}/usuarios", json={"nome": "teste_api", "senha": "123456"})
     show("POST usuário duplicado (400)", r.status_code == 400, f"{r.status_code}")
 
     r = requests.post(f"{BASE}/usuarios/login", json={"nome": "teste_api", "senha": "errada"})
     show("POST login senha errada (401)", r.status_code == 401, f"{r.status_code}")
 
-    r = requests.post(f"{BASE}/usuarios/login", json={"nome": "teste_api", "senha": "123"})
+    r = requests.post(f"{BASE}/usuarios/login", json={"nome": "teste_api", "senha": "123456"})
     show("POST login correto (200)", r.status_code == 200, f"{r.status_code}")
 
     # ---- Importar CSV como rota ----
@@ -53,7 +58,7 @@ def main():
     r = requests.get(f"{BASE}/rotas", params={"usuario_id": usuario_id})
     show("GET rotas do usuário (200)", r.status_code == 200 and len(r.json()) >= 1)
 
-    # ---- Análise e gráfico ----
+    # ---- Análise, gráfico, resumo e eventos ----
     if rota_id:
         r = requests.post(f"{BASE}/rotas/{rota_id}/analisar")
         show("POST analisar rota (200)", r.status_code == 200, f"{r.status_code}")
@@ -61,8 +66,28 @@ def main():
         r = requests.get(f"{BASE}/rotas/{rota_id}/grafico")
         show("GET gráfico da rota (200)", r.status_code == 200 and "pontos" in r.json())
 
+        r = requests.get(f"{BASE}/rotas/{rota_id}/resumo")
+        show("GET resumo da rota (200, com score)",
+             r.status_code == 200 and "score" in r.json())
+
         r = requests.get(f"{BASE}/eventos-risco", params={"rota_id": rota_id})
         show("GET eventos da rota (200)", r.status_code == 200)
+
+        r = requests.get(f"{BASE}/eventos-risco",
+                         params={"rota_id": rota_id, "tipo": "Frenagem brusca"})
+        show("GET eventos filtro por tipo (200)", r.status_code == 200)
+
+    # ---- Configurações (limiares) ----
+    r = requests.get(f"{BASE}/configuracoes/limiares")
+    show("GET limiares (200)", r.status_code == 200 and "velocidade_max" in r.json())
+
+    r = requests.put(f"{BASE}/configuracoes/limiares", json={"velocidade_max": 90})
+    show("PUT limiares (200)", r.status_code == 200)
+
+    # ---- Comparação ----
+    if rota_id:
+        r = requests.post(f"{BASE}/rotas/comparar", json={"rota_ids": [rota_id]})
+        show("POST comparar rotas (200)", r.status_code == 200)
 
     # ---- Regras de negócio ----
     if rota_id:

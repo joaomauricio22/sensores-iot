@@ -1,12 +1,13 @@
 # Trabalho PAV — Telemetria Veicular (OBD-II) e Detecção de Eventos de Risco
 
 Sistema para **receber, padronizar, armazenar e analisar dados de telemetria veicular**
-coletados via interface **OBD-II**, identificando **eventos de condução de risco**
-(frenagens bruscas, acelerações intensas, curvas fechadas).
+coletados via interface **OBD-II**, identificando e **classificando** eventos de condução
+de risco (frenagens bruscas, acelerações intensas, curvas em alta velocidade, excesso de
+velocidade, RPM excessivo e acelerador brusco), com **score de segurança** do condutor.
 
 - **Aluno:** João Maurício Araújo Leitão
 - **Modalidade:** Individual
-- **Tecnologias:** Python, Flask (Flask-RESTful), SQLAlchemy, PostgreSQL, scikit-learn, matplotlib, Tkinter, Docker
+- **Tecnologias:** Python, Flask (Flask-RESTful), SQLAlchemy, PostgreSQL, scikit-learn, matplotlib, tkintermapview, Tkinter, Docker
 
 ## Estrutura do projeto
 
@@ -15,7 +16,7 @@ Trabalho_PAV/
 ├── projeto_api/            # Partes 2, 3 e 5 (modelos, API e Docker)
 │   ├── entities/           # Classes de modelo (SQLAlchemy)
 │   ├── repositories/       # Operações no banco de dados
-│   ├── services/           # Regras de negócio + importação + análise
+│   ├── services/           # Regras de negócio + importação + análise + configuração
 │   │   ├── detectors/      # Detectores de risco (herança/polimorfismo)
 │   │   ├── features.py     # Extração de atributos (Força G, aceleração, instabilidade)
 │   │   └── ImportadorService.py  # Importação e padronização dos CSVs
@@ -33,25 +34,27 @@ Trabalho_PAV/
 │
 ├── projeto_interface/      # Parte 4 (interface gráfica Tkinter)
 │   ├── main.py             # Login + janela principal
-│   ├── tabs.py             # Abas: Rotas, Eventos de Risco e Gráfico
+│   ├── tabs.py             # Abas: Rotas, Dashboard, Eventos, Gráfico, Mapa, Comparar, Configurações
 │   └── api_client.py
 │
 └── apresentacao/           # Parte 6 (apresentação)
     └── slides_pav.pptx
 ```
 
-## Modelo de dados (4 tabelas)
+## Modelo de dados (5 tabelas)
 
 ```
 Usuario 1 ── N Rota 1 ── N Leitura 1 ── N EventoRisco
+                         └── Configuracao (chave/valor)
 ```
 
 | Tabela | Descrição |
 |---|---|
 | `usuario` | Usuário com acesso ao sistema (nome + senha) |
 | `rota` | Uma viagem importada (nome, arquivo de origem) |
-| `leitura` | Frame de telemetria (velocidade, rpm, acelerações, ...) |
-| `evento_risco` | Evento de risco detectado (Força G, instabilidade, método) |
+| `leitura` | Frame de telemetria (velocidade, rpm, acelerações, GPS, ...) |
+| `evento_risco` | Evento de risco detectado (Força G, instabilidade, método, classificação) |
+| `configuracao` | Parâmetros ajustáveis (limiares de detecção), chave/valor |
 
 ## Regras de negócio (10)
 
@@ -69,14 +72,30 @@ Usuario 1 ── N Rota 1 ── N Leitura 1 ── N EventoRisco
 9. **Registro das anomalias:** toda anomalia identificada deve manter informações sobre o sensor, valor, data/hora e método utilizado para sua identificação.
 10. **Análise histórica:** o sistema deve utilizar dados históricos dos sensores para calcular padrões estatísticos e fornecer informações utilizadas na identificação de comportamentos anormais.
 
-## Detecção de risco (3 métodos)
+## Detecção de risco (3 métodos, 6 classificações)
 
-- **LIMITE** — aceleração longitudinal fora dos limites do CTB (+2,5 / -3,0 m/s²).
-- **ESTATISTICO** — z-score da Força G em relação ao histórico.
+**Métodos de detecção** (herança/polimorfismo em `services/detectors/`):
+
+- **LIMITE** — compara cada leitura com os limiares de referência (configuráveis).
+- **ESTATISTICO** — z-score da Força G em relação ao histórico da rota.
 - **MODELO_ML** — DBSCAN (pseudo-rótulos) + RandomForest.
 
+**Classificações** (atribuídas conforme a física do veículo):
+
+| Classificação | Critério (limiar padrão) |
+|---|---|
+| Frenagem brusca | aceleração longitudinal < -3,0 m/s² |
+| Aceleração brusca | aceleração longitudinal > +2,5 m/s² |
+| Curva em alta velocidade | aceleração lateral > 3,0 m/s² e velocidade > 30 km/h |
+| Excesso de velocidade | velocidade > 100 km/h |
+| RPM excessivo | RPM > 5000 |
+| Acelerador brusco | variação do acelerador > 15 %/s |
+
+Os limiares são **ajustáveis** pela aba **Configurações** (tabela `configuracao`).
+
 A Força G resultante é `√(ax² + ay²)`; a instabilidade é o desvio padrão da aceleração
-numa janela de ~3 s.
+numa janela de ~3 s. O **score de segurança** (0–100) desconta pontos conforme a
+severidade dos eventos detectados.
 
 ## Como executar
 
@@ -87,15 +106,17 @@ docker compose up --build -d    # sobe API (8080) + banco (5432)
 
 A API fica em `http://localhost:8080/telemetria`.
 
-Interface gráfica (roda fora do container):
+Interface gráfica (roda fora do container; instale `tkintermapview` para o mapa):
 
 ```bash
 cd projeto_interface
+pip install tkintermapview
 python main.py
 ```
 
-Na interface: **crie uma conta** → entre → **importe um CSV** (dê um nome) → **analise** →
-veja o **gráfico** da Força G com os trechos de risco.
+Na interface: **crie uma conta** → entre → **cadastre uma rota (CSV)** → o sistema
+**analisa automaticamente** e exibe **dashboard (score)**, **eventos**, **gráfico**,
+**mapa (GPS)** e permite **comparar rotas**, **filtrar eventos** e **ajustar limiares**.
 
 Para popular os dados de exemplo (após criar o usuário pela interface):
 
@@ -114,6 +135,10 @@ python seed.py
 | POST | `/telemetria/rotas/importar` | Importar CSV como rota |
 | GET/PUT/DELETE | `/telemetria/rotas/<id>` | Selecionar / renomear / excluir |
 | POST | `/telemetria/rotas/<id>/analisar` | Detecção de eventos de risco |
-| GET | `/telemetria/rotas/<id>/grafico` | Dados para o gráfico |
+| GET | `/telemetria/rotas/<id>/grafico` | Dados para o gráfico (e mapa) |
+| GET | `/telemetria/rotas/<id>/resumo` | Dashboard (score + estatísticas) |
+| POST | `/telemetria/rotas/comparar` | Comparar resumos de rotas |
 | GET/POST | `/telemetria/leituras` | Listar / cadastrar leituras |
-| GET/POST | `/telemetria/eventos-risco` | Listar / cadastrar eventos |
+| GET/POST | `/telemetria/eventos-risco` | Listar (com filtro por tipo) / cadastrar eventos |
+| GET/POST | `/telemetria/configuracoes` | Listar / cadastrar configurações |
+| GET/PUT | `/telemetria/configuracoes/limiares` | Ler / ajustar os limiares |

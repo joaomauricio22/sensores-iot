@@ -17,9 +17,10 @@ class EventoRiscoList(MethodResource, Resource):
     def get(self):
         try:
             rota_id = request.args.get("rota_id", type=int)
+            tipo = request.args.get("tipo")
             if rota_id is not None:
-                return self.__service.get_by_rota(rota_id), 200
-            return self.__service.get_all(), 200
+                return self.__service.get_by_rota(rota_id, tipo), 200
+            return self.__service.get_all(tipo), 200
         except OperationalError:
             abort(500, message="Erro interno do servidor.")
 

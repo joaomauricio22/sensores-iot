@@ -4,5 +4,6 @@ from entities.Usuario import Usuario
 from entities.Rota import Rota
 from entities.Leitura import Leitura
 from entities.EventoRisco import EventoRisco
+from entities.Configuracao import Configuracao
 
-__all__ = ["Usuario", "Rota", "Leitura", "EventoRisco"]
+__all__ = ["Usuario", "Rota", "Leitura", "EventoRisco", "Configuracao"]

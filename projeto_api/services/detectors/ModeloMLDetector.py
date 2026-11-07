@@ -22,7 +22,7 @@ class ModeloMLDetector(DetectorAnomalia):
 
     MIN_AMOSTRAS = 30
 
-    def detectar(self, leituras, rota):
+    def detectar(self, leituras, rota, limiares):
         if len(leituras) < self.MIN_AMOSTRAS:
             return []
 
@@ -67,6 +67,7 @@ class ModeloMLDetector(DetectorAnomalia):
                     "leitura": leitura,
                     "forca_g": matriz[i][3],
                     "instabilidade": matriz[i][1],
+                    "classificacao": "Comportamento atípico",
                     "descricao": "Evento de risco classificado pelo modelo DBSCAN + RandomForest.",
                 })
         return eventos

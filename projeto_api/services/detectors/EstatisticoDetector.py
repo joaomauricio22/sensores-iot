@@ -16,7 +16,7 @@ class EstatisticoDetector(DetectorAnomalia):
 
     LIMIAR_ZSCORE = 3.0
 
-    def detectar(self, leituras, rota):
+    def detectar(self, leituras, rota, limiares):
         forcas = [forca_g_resultante(l) for l in leituras if forca_g_resultante(l) is not None]
         if len(forcas) < 2:
             return []
@@ -38,7 +38,11 @@ class EstatisticoDetector(DetectorAnomalia):
                     "leitura": leitura,
                     "forca_g": fg,
                     "instabilidade": instabilidade_janela(acels, i),
-                    "descricao": f"Força G de {fg:.2f} m/s² com z-score {zscore:.1f} (acima de {self.LIMIAR_ZSCORE}).",
+                    "classificacao": "Comportamento atípico",
+                    "descricao": (
+                        f"Força G de {fg:.2f} m/s² com z-score {zscore:.1f} "
+                        f"(acima de {self.LIMIAR_ZSCORE})."
+                    ),
                 })
         return eventos
 

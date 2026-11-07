@@ -4,7 +4,7 @@ from flask import Flask
 from flask_restful import Api
 
 from config import Config
-from entities import EventoRisco, Leitura, Rota, Usuario  # noqa: F401
+from entities import Configuracao, EventoRisco, Leitura, Rota, Usuario  # noqa: F401
 from entities.Base import db
 from routes.endpoints import initialize_endpoints
 

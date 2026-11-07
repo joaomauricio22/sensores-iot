@@ -89,6 +89,22 @@ class ApiClient:
     def grafico_rota(self, rota_id):
         return requests.get(self._url("rotas", rota_id, "grafico"))
 
+    def resumo_rota(self, rota_id):
+        return requests.get(self._url("rotas", rota_id, "resumo"))
+
+    def comparar_rotas(self, rota_ids):
+        return requests.post(self._url("rotas", extra="comparar"), json={"rota_ids": rota_ids})
+
     # ---- Eventos ----
-    def list_eventos(self, rota_id):
-        return requests.get(self._url("eventos-risco"), params={"rota_id": rota_id})
+    def list_eventos(self, rota_id, tipo=None):
+        params = {"rota_id": rota_id}
+        if tipo:
+            params["tipo"] = tipo
+        return requests.get(self._url("eventos-risco"), params=params)
+
+    # ---- Configurações (limiares) ----
+    def get_limiares(self):
+        return requests.get(self._url("configuracoes", extra="limiares"))
+
+    def set_limiares(self, limiares):
+        return requests.put(self._url("configuracoes", extra="limiares"), json=limiares)

@@ -10,7 +10,7 @@ from entities.Base import db
 class EventoRisco(db.Model):
     __tablename__ = "evento_risco"
     __table_args__ = (
-        UniqueConstraint("leitura_id", "metodo", name="uq_evento_leitura_metodo"),
+        UniqueConstraint("leitura_id", "metodo", "classificacao", name="uq_evento_leitura_metodo_clas"),
     )
 
     id = Column("id_evento", Integer, primary_key=True)
@@ -18,7 +18,7 @@ class EventoRisco(db.Model):
     rota_id = Column("rota_id", Integer, ForeignKey("rota.id_rota"), nullable=False)
     forca_g = Column("forca_g", Float)
     instabilidade = Column("instabilidade", Float)
-    classificacao = Column("classificacao", String(30))
+    classificacao = Column("classificacao", String(30), nullable=False, default="Comportamento atípico")
     metodo = Column("metodo", String(30), nullable=False)
     data_hora = Column("data_hora", DateTime, nullable=False)
     descricao = Column("descricao", String(255))

@@ -7,17 +7,19 @@ from abc import ABC, abstractmethod
 class DetectorAnomalia(ABC):
 
     @abstractmethod
-    def detectar(self, leituras: list, rota) -> list:
+    def detectar(self, leituras: list, rota, limiares: dict) -> list:
         """Retorna a lista de eventos de risco detectados.
 
         Cada evento é um dict com as chaves:
           leitura       -> objeto Leitura sinalizado
           forca_g       -> Força G resultante calculada (float ou None)
           instabilidade -> instabilidade da janela (float)
+          classificacao -> tipo do evento de risco (str)
           descricao     -> texto explicativo
 
         :param leituras: leituras da rota, em ordem cronológica.
         :param rota: rota de origem.
+        :param limiares: dicionário com os limiares de detecção (configuráveis).
         """
         raise NotImplementedError
 

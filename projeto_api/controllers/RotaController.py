@@ -134,3 +134,37 @@ class RotaGrafico(MethodResource, Resource):
             return dados, 200
         except OperationalError:
             abort(500, message="Erro interno do servidor.")
+
+
+class RotaResumo(MethodResource, Resource):
+    """Retorna o resumo (dashboard) e o score de segurança da rota."""
+
+    def __init__(self):
+        self.__analise = AnaliseService()
+
+    def get(self, rota_id):
+        try:
+            resumo = self.__analise.resumo_rota(rota_id)
+            if not resumo:
+                abort(404, message="Rota não encontrada.")
+            return resumo, 200
+        except OperationalError:
+            abort(500, message="Erro interno do servidor.")
+
+
+class RotaComparar(MethodResource, Resource):
+    """Compara o resumo de duas ou mais rotas."""
+
+    def __init__(self):
+        self.__analise = AnaliseService()
+
+    def post(self):
+        try:
+            dados = request.get_json(silent=True) or {}
+            rota_ids = dados.get("rota_ids")
+            if not rota_ids or not isinstance(rota_ids, list):
+                abort(400, message="Informe a lista 'rota_ids' para comparação.")
+            resumos = self.__analise.comparar_rotas(rota_ids)
+            return {"rotas": resumos}, 200
+        except OperationalError:
+            abort(500, message="Erro interno do servidor.")

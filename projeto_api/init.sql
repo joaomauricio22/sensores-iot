@@ -40,9 +40,15 @@ CREATE TABLE IF NOT EXISTS evento_risco (
     rota_id        INTEGER NOT NULL REFERENCES rota(id_rota),
     forca_g        DOUBLE PRECISION,
     instabilidade  DOUBLE PRECISION,
-    classificacao  VARCHAR(30),
+    classificacao  VARCHAR(30) NOT NULL DEFAULT 'Comportamento atípico',
     metodo         VARCHAR(30) NOT NULL,
     data_hora      TIMESTAMP NOT NULL,
     descricao      VARCHAR(255),
-    CONSTRAINT uq_evento_leitura_metodo UNIQUE (leitura_id, metodo)
+    CONSTRAINT uq_evento_leitura_metodo_clas UNIQUE (leitura_id, metodo, classificacao)
+);
+
+CREATE TABLE IF NOT EXISTS configuracao (
+    id_configuracao SERIAL PRIMARY KEY,
+    chave           VARCHAR(100) NOT NULL UNIQUE,
+    valor           VARCHAR(200) NOT NULL
 );

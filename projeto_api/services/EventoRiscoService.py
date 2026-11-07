@@ -12,14 +12,14 @@ class EventoRiscoService:
     def __init__(self):
         self.__repository = EventoRiscoRepository()
 
-    def get_all(self):
-        return self.__repository.get_all()
+    def get_all(self, tipo=None):
+        return self.__repository.get_all(tipo)
 
     def get_by_id(self, evento_id):
         return self.__repository.get_by_id(evento_id)
 
-    def get_by_rota(self, rota_id):
-        return self.__repository.get_by_rota(rota_id)
+    def get_by_rota(self, rota_id, tipo=None):
+        return self.__repository.get_by_rota(rota_id, tipo)
 
     def add(self, leitura_id: int, rota_id: int, data_hora, metodo: str,
             forca_g=None, instabilidade=None, classificacao=None, descricao=None) -> EventoRisco:
