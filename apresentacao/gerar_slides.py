@@ -1,11 +1,11 @@
 """Gera os slides da apresentação (Parte 6) em formato PowerPoint (.pptx).
 
-Tema único (dark/navy) em todos os slides, igual à capa e ao encerramento.
-Domínio: telemetria veicular (OBD-II) e detecção de eventos de risco.
+Tema único (dark/navy). Domínio: telemetria veicular (OBD-II) e detecção de risco.
 
 Executar:  python gerar_slides.py
 Saída:     slides_pav.pptx
 """
+import os
 import sys
 
 from pptx import Presentation
@@ -14,7 +14,9 @@ from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Inches, Pt
 
-# ---------------------------------------------------------------- paleta
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+IMGS = os.path.join(BASE_DIR, "imgs")
+
 NAVY = RGBColor(0x0D, 0x1B, 0x2A)
 NAVY_2 = RGBColor(0x17, 0x2A, 0x45)
 NAVY_3 = RGBColor(0x1F, 0x3A, 0x5C)
@@ -42,7 +44,6 @@ prs.slide_height = Inches(7.5)
 BLANK = prs.slide_layouts[6]
 
 
-# ---------------------------------------------------------------- helpers
 def _shape(slide, kind, l, t, w, h, fill=None, line=None, radius=None):
     sp = slide.shapes.add_shape(kind, Inches(l), Inches(t), Inches(w), Inches(h))
     sp.shadow.inherit = False
@@ -155,13 +156,20 @@ def _card(slide, l, t, w, h, title, body, accent, title_size=15, body_size=12.5)
               body, size=body_size, color=TEXT)
 
 
+def _shot(slide, path, x, y, w, cap):
+    _shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, x - 0.06, y - 0.06, w + 0.12, w * 0.64 + 0.12,
+           fill=NAVY_3, line=NAVY_3, radius=0.04)
+    slide.shapes.add_picture(path, Inches(x), Inches(y), width=Inches(w))
+    _text(slide, x, y + w * 0.64 + 0.1, w, 0.4, cap, size=12, color=SOFT, bold=True,
+          align=PP_ALIGN.CENTER)
+
+
 # ================================================================ 1. CAPA
 slide = prs.slides.add_slide(BLANK)
 _navy_bg(slide, subtle=False)
 chip = _shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, 1.0, 1.35, 3.6, 0.55, fill=NAVY_3, radius=0.5)
 _shape_text(chip, "TRABALHO PAV  •  PROGRAMAÇÃO DE APLICAÇÕES", size=11, color=CYAN, bold=True)
-_text(slide, 1.0, 2.05, 11.3, 1.9, "Telemetria Veicular\n(OBD-II)",
-      size=52, color=WHITE, bold=True)
+_text(slide, 1.0, 2.05, 11.3, 1.9, "Telemetria Veicular\n(OBD-II)", size=52, color=WHITE, bold=True)
 _shape(slide, MSO_SHAPE.RECTANGLE, 1.05, 4.2, 2.6, 0.09, fill=CYAN)
 _text(slide, 1.0, 4.55, 10.5, 1.0,
       "Detecção de eventos de risco na condução com padronização de parâmetros e Machine Learning",
@@ -172,14 +180,14 @@ _text(slide, 1.6, 6.42, 7, 0.35, "João Maurício Araújo Leitão", size=15, col
 # ================================================================ 2. CONTEXTO
 s = _content_slide(1, "Contexto do Sistema", accent=BLUE, page=2)
 _cards = [
-    ("Receber", "Dados de telemetria veicular coletados pela interface OBD-II.", BLUE),
+    ("Receber", "Dados de telemetria coletados pela interface OBD-II do veículo.", BLUE),
     ("Padronizar", "Normaliza nomes de colunas de fontes diferentes para parâmetros canônicos.", PURPLE),
-    ("Armazenar", "Persistência em PostgreSQL (5 tabelas relacionadas).", TEAL),
+    ("Armazenar", "Persistência em PostgreSQL (4 tabelas relacionadas).", TEAL),
     ("Analisar", "Detecção de eventos de risco com DBSCAN e RandomForest.", ORANGE),
 ]
-x, y = 0.6, 1.75
+y = 1.75
 for titulo, texto, cor in _cards:
-    _card(s, x, y, 6.0, 1.05, titulo, texto, cor)
+    _card(s, 0.6, y, 6.0, 1.05, titulo, texto, cor)
     y += 1.22
 _text(s, 7.0, 1.85, 5.7, 5.0,
       "Parâmetros monitorados\n\n"
@@ -195,7 +203,7 @@ s = _content_slide(2, "Problema que o Sistema Resolve", accent=PURPLE, page=3)
 _problemas = [
     ("Volume de dados", "O OBD-II gera milhares de leituras por viagem — análise manual é inviável.", BLUE),
     ("Riscos silenciosos", "Frenagens bruscas e curvas fechadas podem passar despercebidas.", RED),
-    ("Fontes heterogêneas", "Arquivos de ferramentas diferentes usam nomes distintos para a mesma grandeza.", ORANGE),
+    ("Fontes heterogêneas", "Ferramentas diferentes nomeiam a mesma grandeza de formas distintas.", ORANGE),
 ]
 x = 0.6
 for titulo, texto, cor in _problemas:
@@ -233,24 +241,27 @@ for i, (regra, cor) in enumerate(_regras):
 # ================================================================ 5. MODELO DE DADOS
 s = _content_slide(4, "Modelo do Banco de Dados", accent=TEAL, page=5)
 entidades = [
-    ("veiculo", "identificador (único)\nmodelo", BLUE),
-    ("parametro", "nome (canônico)\nunidade\nlimites", PURPLE),
-    ("mapeamento_parametro", "nome bruto\n→ parâmetro", ORANGE),
+    ("usuario", "nome (único)\nsenha (hash)", BLUE),
+    ("rota", "nome\narquivo de origem", PURPLE),
     ("leitura", "velocidade, rpm\naccel_x/y/z\ndata_hora", TEAL),
     ("evento_risco", "força_g\ninstabilidade\nmétodo", RED),
 ]
-x = 0.5
+x = 0.7
 for nome, campos, cor in entidades:
-    box = _shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, x, 2.0, 2.35, 2.1, fill=CARD, radius=0.08)
-    _shape(s, MSO_SHAPE.RECTANGLE, x, 2.0, 2.35, 0.5, fill=cor)
-    _text(s, x, 2.06, 2.35, 0.4, nome, size=13, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
-    _text(s, x + 0.18, 2.66, 2.0, 1.4, campos, size=12, color=TEXT)
-    x += 2.53
-_text(s, 0.5, 4.5, 12.3, 0.6,
-      "Parametro 1─N MapeamentoParametro   •   Veiculo 1─N Leitura 1─N EventoRisco",
+    box = _shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, x, 2.0, 2.6, 2.1, fill=CARD, radius=0.08)
+    _shape(s, MSO_SHAPE.RECTANGLE, x, 2.0, 2.6, 0.5, fill=cor)
+    _text(s, x, 2.06, 2.6, 0.4, nome, size=13, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
+    _text(s, x + 0.2, 2.66, 2.2, 1.4, campos, size=12, color=TEXT)
+    x += 2.6
+    if nome != "evento_risco":
+        _text(s, x - 0.02, 2.95, 0.45, 0.4, "1 ⟶ N", size=13, color=TEXT_DIM, bold=True,
+              align=PP_ALIGN.CENTER)
+        x += 0.55
+_text(s, 0.7, 4.5, 12, 0.6,
+      "Usuario 1─N Rota 1─N Leitura 1─N EventoRisco",
       size=14, color=TEXT_DIM, align=PP_ALIGN.CENTER)
-_card(s, 0.5, 5.5, 12.3, 1.2, "Padronização de parâmetros",
-      "'Vehicle speed (km/h)' e 'Velocidade do veículo (km/h)' → ambos mapeados para 'velocidade'.",
+_card(s, 0.7, 5.5, 12, 1.2, "Padronização de parâmetros (back-end)",
+      "'Vehicle speed (km/h)' e 'Velocidade do veículo (km/h)' → mapeados para o parâmetro canônico 'velocidade'.",
       CYAN, title_size=14, body_size=14)
 
 # ================================================================ 6. ARQUITETURA
@@ -281,7 +292,7 @@ _shape_text(base, "DetectorAnomalia  (classe abstrata)", size=14)
 _shape(s, MSO_SHAPE.RECTANGLE, 6.62, 2.65, 0.06, 0.22, fill=TEXT_DIM)
 _shape(s, MSO_SHAPE.RECTANGLE, 2.05, 2.85, 9.2, 0.05, fill=TEXT_DIM)
 detectores = [
-    ("LimiteDetector", "Força G > limiar", BLUE),
+    ("LimiteDetector", "limites do CTB", BLUE),
     ("EstatisticoDetector", "z-score do histórico", PURPLE),
     ("ModeloMLDetector", "DBSCAN + RandomForest", TEAL),
 ]
@@ -293,7 +304,7 @@ for (nome, desc, cor), x in zip(detectores, xs):
     _text(s, x + 0.1, 3.92, 2.7, 0.4, desc, size=11, color=TEXT_DIM, align=PP_ALIGN.CENTER)
 _cards2 = [
     ("ImportadorService", "Padroniza os nomes de colunas na importação dos CSVs.", TEAL),
-    ("features", "Força G resultante e instabilidade (janela de 3 s).", BLUE),
+    ("features", "Força G resultante, aceleração longitudinal e instabilidade.", BLUE),
     ("AnaliseService", "Orquestra os detectores e registra os eventos.", ORANGE),
 ]
 y = 4.6
@@ -304,8 +315,8 @@ for titulo, texto, cor in _cards2:
 # ================================================================ 8. DETECÇÃO (extra)
 s = _content_slide(None, "Detecção de Risco — 3 métodos", accent=RED, page=8)
 metodos = [
-    ("1", "LIMITE", "Força G resultante acima\ndo limiar físico de 0,5 g.", BLUE),
-    ("2", "ESTATÍSTICO", "z-score (|z| > 3) da Força G\nem relação ao histórico\ndo veículo.", PURPLE),
+    ("1", "LIMITE", "Aceleração longitudinal\nfora dos limites do CTB\n(+2,5 / -3,0 m/s²).", BLUE),
+    ("2", "ESTATÍSTICO", "z-score (|z| > 3) da Força G\nem relação ao histórico\nda rota.", PURPLE),
     ("3", "MODELO_ML", "DBSCAN (pseudo-rótulos)\n+ RandomForest:\nclassifica eventos de risco.", TEAL),
 ]
 x = 0.6
@@ -316,19 +327,20 @@ for num, nome, desc, cor in metodos:
     _text(s, x + 0.3, 3.4, 3.3, 1.6, desc, size=14, color=TEXT)
     x += 4.15
 _text(s, 0.6, 5.45, 12.1, 0.9,
-      "Força G resultante = √(ax² + ay² + az²) / 9,81   •   instabilidade = desvio padrão da aceleração (3 s).",
+      "Força G resultante = √(ax² + ay²)   •   instabilidade = desvio padrão da aceleração (janela de 3 s).",
       size=15, color=TEXT_DIM, align=PP_ALIGN.CENTER)
 
 # ================================================================ 9. ENDPOINTS
 s = _content_slide(7, "Endpoints da API", accent=BLUE, page=9)
 headers = ["Método", "Rota", "Descrição"]
 rows = [
-    ("GET / POST", "/telemetria/veiculos", "Listar / cadastrar veículos"),
-    ("GET / PUT / DELETE", "/telemetria/veiculos/<id>", "Selecionar / editar / excluir"),
-    ("GET", "/telemetria/veiculos/<id>/estatisticas", "Estatísticas de condução (regra 10)"),
-    ("POST", "/telemetria/veiculos/<id>/analisar", "Detecção de eventos de risco (7, 8, 9)"),
-    ("GET / POST", "/telemetria/parametros", "Listar / cadastrar parâmetros"),
-    ("GET / POST", "/telemetria/mapeamentos", "Listar / cadastrar mapeamentos"),
+    ("GET / POST", "/telemetria/usuarios", "Listar / cadastrar usuários"),
+    ("POST", "/telemetria/usuarios/login", "Autenticação"),
+    ("GET / POST", "/telemetria/rotas", "Listar / cadastrar rotas"),
+    ("POST", "/telemetria/rotas/importar", "Importar CSV como rota"),
+    ("GET / PUT / DELETE", "/telemetria/rotas/<id>", "Selecionar / renomear / excluir"),
+    ("POST", "/telemetria/rotas/<id>/analisar", "Detecção de eventos de risco"),
+    ("GET", "/telemetria/rotas/<id>/grafico", "Dados para o gráfico"),
     ("GET / POST", "/telemetria/leituras", "Listar / cadastrar leituras"),
     ("GET / POST", "/telemetria/eventos-risco", "Listar / cadastrar eventos"),
 ]
@@ -359,41 +371,57 @@ for i, row in enumerate(rows, start=1):
                 r.font.color.rgb = TEXT
                 r.font.name = FONT
 table.columns[0].width = Inches(2.4)
-table.columns[1].width = Inches(4.5)
-table.columns[2].width = Inches(5.2)
+table.columns[1].width = Inches(4.4)
+table.columns[2].width = Inches(5.3)
 
 # ================================================================ 10. INTERFACE
 s = _content_slide(8, "Interface Gráfica", accent=TEAL, page=10)
-abas = [
-    ("Veículos", "CRUD + estatísticas / analisar", BLUE),
-    ("Parâmetros", "Catálogo canônico + limites", PURPLE),
-    ("Mapeamentos", "Padronização de nomes", ORANGE),
-    ("Leituras", "Frames de telemetria", TEAL),
-    ("Eventos de Risco", "Consulta dos eventos detectados", RED),
+passos = [
+    ("1. Login", "Criação de conta e autenticação", BLUE),
+    ("2. Importar", "CSV vira uma rota nomeada", PURPLE),
+    ("3. Analisar", "Detecção de eventos de risco", ORANGE),
+    ("4. Visualizar", "Gráfico com trechos de risco", RED),
 ]
 x = 0.6
-for i, (nome, desc, cor) in enumerate(abas):
-    box = _shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, x, 1.7, 2.35, 2.2, fill=CARD, radius=0.08)
-    _shape(s, MSO_SHAPE.OVAL, x + 0.85, 1.95, 0.65, 0.65, fill=cor)
-    _text(s, x + 0.15, 2.8, 2.05, 0.6, nome, size=14, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
-    _text(s, x + 0.15, 3.35, 2.05, 0.6, desc, size=10.5, color=TEXT_DIM, align=PP_ALIGN.CENTER)
-    x += 2.48
+for titulo, desc, cor in passos:
+    box = _shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, x, 1.7, 2.9, 2.2, fill=CARD, radius=0.08)
+    _shape(s, MSO_SHAPE.OVAL, x + 1.1, 1.95, 0.7, 0.7, fill=cor)
+    _text(s, x + 0.15, 2.85, 2.6, 0.6, titulo, size=15, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
+    _text(s, x + 0.15, 3.4, 2.6, 0.6, desc, size=11.5, color=TEXT_DIM, align=PP_ALIGN.CENTER)
+    x += 3.08
 _text(s, 0.6, 4.35, 12.1, 0.6,
-      "Tkinter — projeto separado da API (roda fora do container).",
+      "Tkinter (projeto separado da API) + matplotlib para o gráfico.",
       size=15, color=TEXT, align=PP_ALIGN.CENTER)
-_card(s, 0.6, 5.2, 12.1, 1.5, "Operações disponíveis por tela",
-      "Cadastro  •  Busca  •  Edição  •  Exclusão  •  Listagem em tabela\n"
-      "Botões especiais: Detectar Riscos e Estatísticas (na aba Veículos)",
+_card(s, 0.6, 5.2, 12.1, 1.5, "Centrada no usuário",
+      "Sem expor IDs: a seleção é feita clicando na lista de rotas.\n"
+      "O cadastro de leituras é feito em lote via importação de CSV.",
       CYAN, title_size=14, body_size=14)
 
+# ================================================================ telas (capturas)
+s = prs.slides.add_slide(BLANK)
+_navy_bg(s)
+_text(s, 0.6, 0.4, 12, 0.7, "Telas do Sistema", size=28, color=WHITE, bold=True)
+_shape(s, MSO_SHAPE.RECTANGLE, 0.65, 1.15, 2.2, 0.06, fill=CYAN)
+_shot(s, os.path.join(IMGS, "rotas.png"), 0.55, 1.5, 5.9, "Tela de Rotas (importar / analisar)")
+_shot(s, os.path.join(IMGS, "eventos.png"), 6.9, 1.5, 5.9, "Tela de Eventos de Risco")
+_footer(s, 11)
+
+s = prs.slides.add_slide(BLANK)
+_navy_bg(s)
+_text(s, 0.6, 0.4, 12, 0.7, "Login e Gráfico de Risco", size=28, color=WHITE, bold=True)
+_shape(s, MSO_SHAPE.RECTANGLE, 0.65, 1.15, 2.2, 0.06, fill=CYAN)
+_shot(s, os.path.join(IMGS, "login.png"), 0.9, 2.1, 3.4, "Tela de Login / Cadastro")
+_shot(s, os.path.join(IMGS, "grafico.png"), 4.9, 1.4, 7.8, "Gráfico da Força G com trechos de risco")
+_footer(s, 12)
+
 # ================================================================ 11. DEMONSTRAÇÃO
-s = _content_slide(9, "Demonstração do Funcionamento", accent=ORANGE, page=11)
+s = _content_slide(9, "Demonstração do Funcionamento", accent=ORANGE, page=13)
 demos = [
-    ("Importação real", "18.943 leituras de 4 veículos, padronizadas a partir dos CSVs.", BLUE),
-    ("CRUD completo", "Cadastro, consulta, edição e exclusão em cada entidade.", PURPLE),
-    ("Regras de negócio", "Ex.: veículo duplicado, leitura de veículo inexistente, frame duplicado.", TEAL),
-    ("Análise", "532 eventos de risco detectados pelos 3 métodos.", ORANGE),
-    ("Persistência", "Dados gravados no PostgreSQL (dentro do container).", RED),
+    ("Cadastro e login", "Criação de conta e autenticação do usuário.", BLUE),
+    ("Importação real", "Arquivos CSV importados e padronizados como rotas.", PURPLE),
+    ("Regras de negócio", "Ex.: leitura de rota inexistente, usuário duplicado.", TEAL),
+    ("Análise", "Eventos de risco detectados pelos 3 métodos.", ORANGE),
+    ("Gráfico", "Força G ao longo do tempo com trechos de risco destacados.", RED),
 ]
 y = 1.7
 for titulo, texto, cor in demos:
@@ -401,7 +429,7 @@ for titulo, texto, cor in demos:
     y += 1.02
 
 # ================================================================ 12. DIFICULDADES
-s = _content_slide(10, "Principais Dificuldades", accent=RED, page=12)
+s = _content_slide(10, "Principais Dificuldades", accent=RED, page=14)
 difs = [
     ("Padronização de parâmetros", "Fontes diferentes nomeiam a mesma grandeza de formas distintas.", BLUE),
     ("Performance na análise", "Commit por evento expirava os objetos do SQLAlchemy — resolvido com commit em lote.", PURPLE),
@@ -416,8 +444,7 @@ for titulo, texto, cor in difs:
 # ================================================================ 13. OBRIGADO
 slide = prs.slides.add_slide(BLANK)
 _navy_bg(slide, subtle=False)
-_text(slide, 0.6, 2.5, 12.1, 1.5, "Obrigado!", size=58, color=WHITE, bold=True,
-      align=PP_ALIGN.CENTER)
+_text(slide, 0.6, 2.5, 12.1, 1.5, "Obrigado!", size=58, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
 _shape(slide, MSO_SHAPE.RECTANGLE, 5.66, 4.15, 2.0, 0.08, fill=CYAN)
 _text(slide, 0.6, 4.55, 12.1, 0.8, "Perguntas?", size=24, color=SOFT, align=PP_ALIGN.CENTER)
 _text(slide, 0.6, 6.6, 12.1, 0.5, "Telemetria Veicular (OBD-II)  •  João Maurício Araújo Leitão",

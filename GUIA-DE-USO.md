@@ -1,17 +1,14 @@
 # Guia de Uso — Telemetria Veicular (OBD-II)
 
-Este guia explica como usar o sistema **como uma ferramenta real de monitoramento de frota**,
-desde a configuração até a análise dos eventos de risco.
+Este guia explica como usar o sistema **como um produto real**: criar conta, importar
+rotas de telemetria e visualizar o comportamento de risco no gráfico.
 
 ---
 
 ## Visão geral
 
 ```
-OBD-II (veículo) ──(CSV/telemetria)──▶ Importador ──▶ API REST ──▶ PostgreSQL
-                                                        ▲
-                                                        │
-                                            Interface Gráfica (Tkinter)
+Login → Importar CSV (rota) → Analisar → Gráfico com trechos de risco
 ```
 
 - **API** (`projeto_api`): recebe, padroniza, armazena e analisa os dados.
@@ -25,14 +22,9 @@ OBD-II (veículo) ──(CSV/telemetria)──▶ Importador ──▶ API REST 
 ```bash
 cd projeto_api
 docker compose up --build -d   # sobe API (8080) + banco (5432)
-
-# Popular com os parâmetros canônicos, mapeamentos e importar os CSVs
-python seed.py
 ```
 
 A API fica em `http://localhost:8080/telemetria`.
-
-Abra a interface em **outro terminal**:
 
 ```bash
 cd projeto_interface
@@ -41,59 +33,37 @@ python main.py
 
 ---
 
-## 2. Configuração (catálogo de parâmetros + padronização)
+## 2. Primeiro acesso (cadastro e login)
 
-O `seed.py` já cria:
+1. Na tela de login, clique em **Criar conta**.
+2. Digite um usuário e uma senha.
+3. Entre com essas credenciais.
 
-1. **Parâmetros canônicos** (`/parametros`): velocidade, rpm, accel_x/y/z, posição do acelerador, latitude, longitude — cada um com unidade e limites.
-2. **Mapeamentos** (`/mapeamentos`): a padronização que traduz os nomes brutos das colunas
-   (`Vehicle speed (km/h)`, `Velocidade do veículo (km/h)`, ...) para os parâmetros canônicos.
-3. **Veículos** (`/veiculos`): um por arquivo CSV importado.
-
-> É aqui que entra a **padronização**: se um novo arquivo usar outro nome para a mesma
-> grandeza, basta adicionar um mapeamento na aba "Mapeamentos".
+> O primeiro usuário é criado por você (nenhum usuário é pré-cadastrado).
 
 ---
 
-## 3. Importar novos dados (o dia a dia)
+## 3. Importar uma rota (o "cadastro")
 
-Quando chega um novo arquivo de telemetria:
+Na aba **Rotas**, clique em **Importar CSV**:
+1. Selecione o arquivo `.csv` de telemetria.
+2. Dê um nome para a rota (ex.: "Rota 1").
+3. O sistema importa as leituras, padronizando os nomes das colunas.
 
-```python
-# Exemplo programático (ou via um script próprio)
-from services.ImportadorService import ImportadorService
-imp.importar_csv("novo_arquivo.csv", "VEICULO-005", "CSVLog")
-```
-
-Ou, na prática, adicione o arquivo em `seed.py` e rode `python seed.py`.
-
-O importador:
-- Lê o `StartTime` e a coluna `Time (sec)` para calcular a data/hora real de cada frame.
-- Traduz cada coluna pelo mapeamento (colunas não mapeadas são **ignoradas**).
-- Descarta frames duplicados (mesmo veículo + instante).
+> Colunas não reconhecidas são ignoradas; frames duplicados são descartados.
 
 ---
 
-## 4. Analisar (detecção de eventos de risco)
+## 4. Analisar e visualizar
 
-- **Interface**: aba "Veículos" → digite o ID → **Detectar Riscos**.
-- **API**: `POST /telemetria/veiculos/<id>/analisar`.
-
-O sistema roda os 3 métodos e grava em "Eventos de Risco":
-- `LIMITE` — Força G acima de 0,5 g.
-- `ESTATISTICO` — z-score da Força G acima de 3.
-- `MODELO_ML` — DBSCAN + RandomForest.
+1. Na aba **Rotas**, selecione a rota e clique em **Analisar**.
+2. Os eventos de risco aparecem na aba **Eventos de Risco**.
+3. Na aba **Gráfico**, clique em **Plotar Gráfico** para ver a **Força G ao longo
+   do tempo**, com a linha do limite (CTB) e os **trechos de risco em vermelho**.
 
 ---
 
-## 5. Monitorar
-
-- Aba **Eventos de Risco** → veja os eventos detectados e o método de cada um.
-- Aba **Veículos** → **Estatísticas** → Força G média/máxima/desvio do histórico.
-
----
-
-## 6. Comandos úteis
+## 5. Comandos úteis
 
 ```bash
 # Parar / subir os containers
@@ -103,7 +73,7 @@ docker compose up -d
 # Rebuild (se mudou o código)
 docker compose up --build -d
 
-# Popular/importar os CSVs
+# Popular com os CSVs de exemplo (após criar o usuário pela interface)
 cd projeto_api && python seed.py
 
 # Rodar os testes
