@@ -165,6 +165,21 @@ class AnaliseService:
                 resumos.append(resumo)
         return resumos
 
+    def reanalisar_rota(self, rota_id: int):
+        """Remove os eventos existentes e reexecuta a análise (novos limiares)."""
+        if self.__rota_repository.get_by_id(rota_id) is None:
+            return None
+        db.session.query(EventoRisco).filter(EventoRisco.rota_id == rota_id).delete()
+        db.session.commit()
+        return self.analisar_rota(rota_id)
+
+    def reanalisar_todas(self) -> int:
+        """Reanalisa todas as rotas; retorna a quantidade de rotas reprocessadas."""
+        rotas = self.__rota_repository.get_all()
+        for rota in rotas:
+            self.reanalisar_rota(rota.id)
+        return len(rotas)
+
     def __calcular_distancia(self, leituras) -> float:
         """Soma a distância percorrida entre leituras consecutivas (km)."""
         total = 0.0

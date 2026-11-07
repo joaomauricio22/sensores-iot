@@ -800,6 +800,11 @@ class ConfiguracaoTab(tk.Frame):
             messagebox.showerror("Erro", f"Erro de comunicação com a API:\n{e}")
             return
         if resp.status_code == 200:
-            messagebox.showinfo("Sucesso", "Limiares atualizados com sucesso.")
+            n = resp.json().get("rotas_reanalisadas", 0)
+            msg = "Limiares atualizados com sucesso."
+            if n:
+                msg += f"\n{int(n)} rota(s) reanalisada(s) com os novos limiares."
+            messagebox.showinfo("Sucesso", msg)
+            self.app.refresh_detalhes()
         else:
             messagebox.showerror("Erro", extract_error(resp))

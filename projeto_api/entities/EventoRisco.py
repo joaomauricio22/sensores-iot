@@ -6,7 +6,8 @@ from entities.Base import db
 
 # Classe que mapeia a tabela "evento_risco".
 # Registra um evento de risco detectado na análise, com a magnitude da Força G,
-# a instabilidade, a classificação (NORMAL/RISCO), o método e o instante.
+# a instabilidade, a classificação (ex.: frenagem brusca, excesso de velocidade),
+# o método de detecção e o instante.
 class EventoRisco(db.Model):
     __tablename__ = "evento_risco"
     __table_args__ = (

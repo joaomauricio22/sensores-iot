@@ -39,7 +39,7 @@ class EventoRiscoService:
             metodo=metodo,
             forca_g=forca_g,
             instabilidade=instabilidade,
-            classificacao=classificacao,
+            classificacao=classificacao or "Comportamento atípico",
             descricao=descricao,
         )
         return self.__repository.add(evento)
@@ -57,7 +57,7 @@ class EventoRiscoService:
         evento.metodo = metodo
         evento.forca_g = forca_g
         evento.instabilidade = instabilidade
-        evento.classificacao = classificacao
+        evento.classificacao = classificacao or "Comportamento atípico"
         evento.descricao = descricao
         return self.__repository.update(evento)
 

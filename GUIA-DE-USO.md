@@ -68,7 +68,7 @@ Ao selecionar uma rota, cada aba se atualiza automaticamente:
 | **Gráfico** | painel com velocidade, Força G e RPM, e os trechos de risco coloridos por tipo |
 | **Mapa** | trajeto GPS (OpenStreetMap) com os trechos de risco marcados |
 | **Comparar** | compara o resumo (score e estatísticas) de duas rotas |
-| **Configurações** | ajusta os limiares de detecção (velocidade, RPM, aceleração, etc.) |
+| **Configurações** | ajusta os limiares de detecção (velocidade, RPM, aceleração, etc.) — ao salvar, as rotas são **reanalisadas** |
 
 > No **Dashboard**, use **Exportar Relatório (CSV)** para gerar um arquivo com as
 > estatísticas e os eventos da rota.

@@ -2,9 +2,12 @@
 
 Executar com a API em execução:  python test_api.py
 """
+import time
+
 import requests
 
 BASE = "http://localhost:8080/telemetria"
+NOME_TESTE = f"teste_api_{int(time.time())}"
 
 
 def show(titulo, ok, detalhe=""):
@@ -30,20 +33,20 @@ Time (sec), Vehicle speed (km/h), Engine RPM (RPM), Accel X (m/s²), Accel Y (m/
 
 def main():
     # ---- Cadastro e login ----
-    r = requests.post(f"{BASE}/usuarios", json={"nome": "teste_api", "senha": "123"})
+    r = requests.post(f"{BASE}/usuarios", json={"nome": NOME_TESTE, "senha": "123"})
     show("POST usuário senha curta (400)", r.status_code == 400, f"{r.status_code}")
 
-    r = requests.post(f"{BASE}/usuarios", json={"nome": "teste_api", "senha": "123456"})
+    r = requests.post(f"{BASE}/usuarios", json={"nome": NOME_TESTE, "senha": "123456"})
     show("POST usuário (201)", r.status_code == 201, f"{r.status_code}")
     usuario_id = r.json().get("id") if r.status_code == 201 else None
 
-    r = requests.post(f"{BASE}/usuarios", json={"nome": "teste_api", "senha": "123456"})
+    r = requests.post(f"{BASE}/usuarios", json={"nome": NOME_TESTE, "senha": "123456"})
     show("POST usuário duplicado (400)", r.status_code == 400, f"{r.status_code}")
 
-    r = requests.post(f"{BASE}/usuarios/login", json={"nome": "teste_api", "senha": "errada"})
+    r = requests.post(f"{BASE}/usuarios/login", json={"nome": NOME_TESTE, "senha": "errada"})
     show("POST login senha errada (401)", r.status_code == 401, f"{r.status_code}")
 
-    r = requests.post(f"{BASE}/usuarios/login", json={"nome": "teste_api", "senha": "123456"})
+    r = requests.post(f"{BASE}/usuarios/login", json={"nome": NOME_TESTE, "senha": "123456"})
     show("POST login correto (200)", r.status_code == 200, f"{r.status_code}")
 
     # ---- Importar CSV como rota ----
@@ -80,9 +83,33 @@ def main():
     # ---- Configurações (limiares) ----
     r = requests.get(f"{BASE}/configuracoes/limiares")
     show("GET limiares (200)", r.status_code == 200 and "velocidade_max" in r.json())
+    velocidade_original = r.json().get("velocidade_max", 100)
 
-    r = requests.put(f"{BASE}/configuracoes/limiares", json={"velocidade_max": 90})
-    show("PUT limiares (200)", r.status_code == 200)
+    r = requests.put(f"{BASE}/configuracoes/limiares",
+                     json={"velocidade_max": velocidade_original + 5})
+    show("PUT limiares reanalisa rotas (200)",
+         r.status_code == 200 and "rotas_reanalisadas" in r.json(),
+         f"{r.status_code} {r.text[:80]}")
+
+    # Restaura o limiar original para não deixar a configuração alterada.
+    requests.put(f"{BASE}/configuracoes/limiares",
+                 json={"velocidade_max": velocidade_original})
+
+    # ---- CRUD de configurações ----
+    r = requests.post(f"{BASE}/configuracoes", json={"chave": "teste_config", "valor": "abc"})
+    show("POST configuração (201)", r.status_code == 201, f"{r.status_code}")
+    config_id = r.json().get("id") if r.status_code == 201 else None
+
+    r = requests.post(f"{BASE}/configuracoes", json={"chave": "teste_config", "valor": "xyz"})
+    show("POST configuração duplicada (400)", r.status_code == 400, f"{r.status_code}")
+
+    if config_id:
+        r = requests.put(f"{BASE}/configuracoes/{config_id}", json={"valor": "def"})
+        show("PUT configuração (200)",
+             r.status_code == 200 and r.json().get("valor") == "def")
+
+        r = requests.delete(f"{BASE}/configuracoes/{config_id}")
+        show("DELETE configuração (200)", r.status_code == 200)
 
     # ---- Comparação ----
     if rota_id:
@@ -101,6 +128,14 @@ def main():
 
     r = requests.delete(f"{BASE}/usuarios/{usuario_id}")
     show("DELETE usuário com rotas (409)", r.status_code == 409, f"{r.status_code}")
+
+    # Limpeza: exclui a rota (cascata em leituras/eventos) e depois o usuário.
+    if rota_id:
+        r = requests.delete(f"{BASE}/rotas/{rota_id}")
+        show("DELETE rota com leituras (200)", r.status_code == 200, f"{r.status_code}")
+
+    r = requests.delete(f"{BASE}/usuarios/{usuario_id}")
+    show("DELETE usuário sem rotas (200)", r.status_code == 200, f"{r.status_code}")
 
     print("\nTestes concluídos.")
 

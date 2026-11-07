@@ -2,7 +2,7 @@ from flask_restful import Resource, abort, request
 from flask_apispec import marshal_with, use_kwargs
 from flask_apispec.views import MethodResource
 from marshmallow import ValidationError
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import OperationalError
 
 from controllers.schemas import (
     EventoRiscoResponseSchema,
@@ -75,8 +75,6 @@ class RotaItem(MethodResource, Resource):
             if not rota:
                 abort(404, message="Rota não encontrada.")
             return {"message": "Rota excluída com sucesso."}, 200
-        except IntegrityError:
-            abort(409, message="Não é possível excluir: há leituras ou eventos vinculados.")
         except OperationalError:
             abort(500, message="Erro interno do servidor.")
 

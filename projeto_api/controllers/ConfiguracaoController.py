@@ -10,6 +10,7 @@ from controllers.schemas import (
     ConfiguracaoUpdateSchema,
     LimiaresRequestSchema,
 )
+from services.AnaliseService import AnaliseService
 from services.ConfiguracaoService import ConfiguracaoService
 
 
@@ -81,6 +82,7 @@ class ConfiguracaoLimiares(MethodResource, Resource):
 
     def __init__(self):
         self.__service = ConfiguracaoService()
+        self.__analise = AnaliseService()
 
     def get(self):
         try:
@@ -94,7 +96,13 @@ class ConfiguracaoLimiares(MethodResource, Resource):
             atualizados = self.__service.set_limiares(
                 {k: v for k, v in kwargs.items() if v is not None}
             )
-            return {"message": "Limiares atualizados.", "limiares": atualizados}, 200
+            # Reanalisa as rotas com os novos limiares (remove e recria os eventos).
+            rotas_reanalisadas = self.__analise.reanalisar_todas()
+            return {
+                "message": "Limiares atualizados e rotas reanalisadas.",
+                "limiares": atualizados,
+                "rotas_reanalisadas": rotas_reanalisadas,
+            }, 200
         except ValidationError as e:
             abort(400, message=str(e))
         except OperationalError:
