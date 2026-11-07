@@ -52,3 +52,15 @@ def instabilidade_janela(valores, indice, tamanho=3) -> float:
     if len(janela) < 2:
         return 0.0
     return statistics.stdev(janela)
+
+
+def classificar_risco(leitura, acel_longitudinal) -> str:
+    """Classifica o tipo do evento de risco com base na física do veículo."""
+    if acel_longitudinal < -3.0:
+        return "Frenagem brusca"
+    if acel_longitudinal > 2.5:
+        return "Aceleração brusca"
+    if leitura.accel_y is not None and leitura.velocidade is not None:
+        if abs(leitura.accel_y) > 3.0 and leitura.velocidade > 30:
+            return "Curva em alta velocidade"
+    return "Evento de risco"

@@ -28,6 +28,8 @@ class UsuarioService:
             raise ValidationError("O nome de usuário é obrigatório.")
         if not senha or not str(senha).strip():
             raise ValidationError("A senha é obrigatória.")
+        if len(senha) < 6:
+            raise ValidationError("A senha deve ter pelo menos 6 caracteres.")
         if self.__repository.get_by_nome(nome):
             raise ValidationError("Já existe um usuário com esse nome.")
         usuario = Usuario(nome=nome, senha=_hash_senha(senha))

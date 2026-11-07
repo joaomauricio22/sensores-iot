@@ -57,6 +57,9 @@ class CadastroWindow(tk.Toplevel):
         if not senha:
             messagebox.showwarning("Aviso", "Informe uma senha.")
             return
+        if len(senha) < 6:
+            messagebox.showerror("Erro", "A senha deve ter pelo menos 6 caracteres.")
+            return
         if senha != confirmar:
             messagebox.showerror("Erro", "As senhas não conferem.")
             return
@@ -154,8 +157,11 @@ class App:
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_change)
 
     def _on_tab_change(self, _event):
-        # ao abrir a aba Gráfico, plota automaticamente a rota selecionada.
-        if self.notebook.index(self.notebook.select()) == 1:
+        # atualização automática ao trocar de aba.
+        idx = self.notebook.index(self.notebook.select())
+        if idx == 0:
+            self.rota_tab.atualizar()
+        elif idx == 1:
             self.grafico_tab.plotar()
 
     def mostrar_grafico(self):

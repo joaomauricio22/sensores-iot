@@ -1,7 +1,8 @@
 """Telas da interface gráfica (centrada no usuário).
 
-- RotaTab: lista as rotas, importa CSV, renomeia, exclui e analisa.
-- GraficoTab: gráfico automático da Força G ao longo do tempo, com os trechos de risco.
+- RotaTab: lista as rotas, cadastra via CSV, renomeia e exclui.
+- GraficoTab: gráfico automático da velocidade (km/h) com os trechos de risco,
+  coloridos conforme o tipo do evento.
 """
 import os
 import tkinter as tk
@@ -15,12 +16,19 @@ from api_client import extract_error
 
 BG = "#f5f6fa"
 
+CORES_TIPO = {
+    "Frenagem brusca": "#d63031",
+    "Aceleração brusca": "#e17055",
+    "Curva em alta velocidade": "#6c5ce7",
+    "Evento de risco": "#d63031",
+}
+
 
 def _botao(parent, texto, cor, comando):
     return tk.Button(
         parent, text=texto, command=comando, font=("Segoe UI", 10, "bold"),
         bg=cor, fg="white", activebackground=cor, activeforeground="white",
-        relief="flat", cursor="hand2", width=13, height=1, bd=0,
+        relief="flat", cursor="hand2", width=20, height=1, bd=0,
     )
 
 
@@ -31,7 +39,6 @@ class RotaTab(tk.Frame):
         self.app = app
         self.tree = None
         self._build()
-        self.atualizar()
 
     def _build(self):
         tk.Label(self, text="Minhas Rotas", font=("Segoe UI", 20, "bold"),
@@ -39,19 +46,17 @@ class RotaTab(tk.Frame):
 
         btns = tk.Frame(self, bg=BG)
         btns.pack(pady=6)
-        _botao(btns, "Importar CSV", "#0984e3", self.importar_csv).pack(side="left", padx=4)
+        _botao(btns, "Cadastrar Rota (CSV)", "#0984e3", self.cadastrar_rota).pack(side="left", padx=4)
         _botao(btns, "Renomear", "#e17055", self.renomear).pack(side="left", padx=4)
         _botao(btns, "Excluir", "#d63031", self.excluir).pack(side="left", padx=4)
-        _botao(btns, "Analisar", "#6c5ce7", self.analisar).pack(side="left", padx=4)
-        _botao(btns, "Atualizar", "#00b894", self.atualizar).pack(side="left", padx=4)
 
         frame = tk.Frame(self, bg=BG)
         frame.pack(fill="both", expand=True, padx=20, pady=(5, 15))
-        cols = ["id", "nome", "arquivo", "data_importacao"]
+        cols = ["id", "nome", "arquivo", "data"]
         self.tree = ttk.Treeview(frame, columns=cols, show="headings", height=12)
         for key, label, width in [
-            ("id", "ID", 50), ("nome", "Nome", 180),
-            ("arquivo", "Arquivo de origem", 240), ("data_importacao", "Importação", 180),
+            ("id", "ID", 50), ("nome", "Nome", 200),
+            ("arquivo", "Arquivo de origem", 260), ("data", "Data", 120),
         ]:
             self.tree.heading(key, text=label)
             self.tree.column(key, width=width, anchor="center")
@@ -83,11 +88,12 @@ class RotaTab(tk.Frame):
         if resp.status_code != 200:
             return
         for r in resp.json():
+            data = (r.get("data_importacao") or "").split("T")[0]
             self.tree.insert("", "end", values=(
-                r["id"], r["nome"], r.get("arquivo_origem") or "", r["data_importacao"],
+                r["id"], r["nome"], r.get("arquivo_origem") or "", data,
             ))
 
-    def importar_csv(self):
+    def cadastrar_rota(self):
         caminho = filedialog.askopenfilename(
             title="Selecionar arquivo de telemetria", filetypes=[("CSV", "*.csv")],
         )
@@ -111,8 +117,8 @@ class RotaTab(tk.Frame):
             dados = resp.json()
             self.app.rota_atual_id = dados["rota_id"]
             self.atualizar()
-            # gera o gráfico automaticamente para a rota recém-importada
-            self.app.mostrar_grafico()
+            # gera o gráfico automaticamente (sem trocar de aba)
+            self.app.grafico_tab.plotar()
         else:
             messagebox.showerror("Erro", extract_error(resp))
 
@@ -125,7 +131,6 @@ class RotaTab(tk.Frame):
             return
         resp = self.app.api.renomear_rota(rota_id, nome)
         if resp.status_code == 200:
-            messagebox.showinfo("Sucesso", "Rota renomeada.")
             self.atualizar()
         else:
             messagebox.showerror("Erro", extract_error(resp))
@@ -142,28 +147,10 @@ class RotaTab(tk.Frame):
             messagebox.showerror("Erro", f"Erro de comunicação com a API:\n{e}")
             return
         if resp.status_code == 200:
-            messagebox.showinfo("Sucesso", "Rota excluída.")
             self.atualizar()
-        else:
-            messagebox.showerror("Erro", extract_error(resp))
-
-    def analisar(self):
-        rota_id = self._get_selecionada()
-        if rota_id is None:
-            return
-        try:
-            resp = self.app.api.analisar_rota(rota_id)
-        except requests.exceptions.RequestException as e:
-            messagebox.showerror("Erro", f"Erro de comunicação com a API:\n{e}")
-            return
-        if resp.status_code == 200:
-            eventos = resp.json()
-            if eventos:
-                messagebox.showwarning("Análise", f"{len(eventos)} novo(s) evento(s) de risco detectado(s).")
-            else:
-                messagebox.showinfo("Análise", "Nenhum novo evento de risco detectado.")
-            # atualiza o gráfico com os trechos de risco
-            self.app.mostrar_grafico()
+            if self.app.rota_atual_id == rota_id:
+                self.app.rota_atual_id = None
+                self.app.grafico_tab.plotar()
         else:
             messagebox.showerror("Erro", extract_error(resp))
 
@@ -174,6 +161,7 @@ class GraficoTab(tk.Frame):
         super().__init__(master, bg=BG)
         self.app = app
         self.figure = Figure(figsize=(7, 4.4), dpi=100, facecolor=BG)
+        self.ax = self.figure.add_subplot(111)
         self.canvas = FigureCanvasTkAgg(self.figure, master=self)
         self._build()
 
@@ -185,44 +173,52 @@ class GraficoTab(tk.Frame):
 
     def plotar(self):
         rota_id = self.app.rota_atual_id
-        ax = self.figure.add_subplot(111)
-        ax.clear()
+        self.ax.clear()
         if not rota_id:
-            ax.text(0.5, 0.5, "Importe uma rota para visualizar o gráfico.",
-                    ha="center", va="center", fontsize=12, color="#636e72")
-            self.figure.tight_layout()
+            self.ax.text(0.5, 0.5, "Cadastre uma rota para visualizar o gráfico.",
+                         ha="center", va="center", fontsize=12, color="#636e72")
+            self.ax.set_xticks([])
+            self.ax.set_yticks([])
             self.canvas.draw()
             return
+
+        # análise automática (idempotente) + dados do gráfico
         try:
+            self.app.api.analisar_rota(rota_id)
             resp = self.app.api.grafico_rota(rota_id)
         except requests.exceptions.RequestException:
             self.canvas.draw()
             return
         if resp.status_code != 200:
-            ax.text(0.5, 0.5, extract_error(resp), ha="center", va="center",
-                    fontsize=12, color="#d63031")
-            self.figure.tight_layout()
+            self.ax.text(0.5, 0.5, extract_error(resp), ha="center", va="center",
+                         fontsize=12, color="#d63031")
+            self.ax.set_xticks([])
+            self.ax.set_yticks([])
             self.canvas.draw()
             return
 
         dados = resp.json()
         pontos = dados["pontos"]
         tempos = [p["tempo"] for p in pontos]
-        fgs = [p["forca_g"] if p["forca_g"] is not None else 0.0 for p in pontos]
-        riscos = [
-            (p["tempo"], p["forca_g"])
-            for p in pontos if p["risco"] and p["forca_g"] is not None
-        ]
+        velocidades = [p["velocidade"] if p["velocidade"] is not None else 0.0 for p in pontos]
 
-        ax.plot(tempos, fgs, color="#0984e3", linewidth=1.0, label="Força G resultante")
-        if riscos:
-            rt, rf = zip(*riscos)
-            ax.scatter(rt, rf, color="#d63031", s=28, zorder=5, label="Evento de risco")
-        ax.axhline(y=2.5, color="#f39c12", linestyle="--", linewidth=1.2, label="Limite CTB (2,5 m/s²)")
-        ax.set_xlabel("Tempo (s)")
-        ax.set_ylabel("Força G resultante (m/s²)")
-        ax.set_title(dados["nome"])
-        ax.legend(loc="upper right", fontsize="small")
-        ax.grid(True, linestyle="--", alpha=0.5)
+        self.ax.plot(tempos, velocidades, color="#0984e3", linewidth=1.2, label="Velocidade (km/h)")
+
+        # pontos de risco, coloridos conforme o tipo
+        for tipo, cor in CORES_TIPO.items():
+            pts = [
+                (p["tempo"], p["velocidade"])
+                for p in pontos
+                if p["risco"] and p["classificacao"] == tipo and p["velocidade"] is not None
+            ]
+            if pts:
+                t, v = zip(*pts)
+                self.ax.scatter(t, v, color=cor, s=30, zorder=5, label=tipo)
+
+        self.ax.set_xlabel("Tempo (s)")
+        self.ax.set_ylabel("Velocidade (km/h)")
+        self.ax.set_title(dados["nome"])
+        self.ax.legend(loc="upper right", fontsize="small")
+        self.ax.grid(True, linestyle="--", alpha=0.5)
         self.figure.tight_layout()
         self.canvas.draw()

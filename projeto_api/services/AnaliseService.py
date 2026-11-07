@@ -7,7 +7,7 @@ from services.detectors.LimiteDetector import LimiteDetector
 from services.detectors.EstatisticoDetector import EstatisticoDetector
 from services.detectors.ModeloMLDetector import ModeloMLDetector
 from services.features import (
-    aceleracao_longitudinal,
+    classificar_risco,
     forca_g_resultante,
     lista_aceleracoes_longitudinais,
 )
@@ -15,7 +15,7 @@ from services.features import (
 
 # Camada de serviço responsável pela ANÁLISE da telemetria.
 #   - Executa os detectores de risco (limite CTB, estatístico e ML);
-#   - Registra os eventos de risco identificados;
+#   - Classifica o tipo de cada evento (frenagem, aceleração, curva);
 #   - Fornece os dados para o gráfico de comportamento do condutor.
 class AnaliseService:
 
@@ -26,26 +26,32 @@ class AnaliseService:
         self.__detectores = [LimiteDetector(), EstatisticoDetector(), ModeloMLDetector()]
 
     def analisar_rota(self, rota_id: int):
-        """Executa os detectores sobre o histórico de uma rota e registra os eventos."""
+        """Executa os detectores e classifica os eventos de risco (idempotente)."""
         rota = self.__rota_repository.get_by_id(rota_id)
         if not rota:
             return None
 
+        # Se a rota já foi analisada, não refaz (evita reprocessar o ML).
+        if self.__evento_repository.get_by_rota(rota_id):
+            return []
+
         leituras = self.__leitura_repository.get_by_rota(rota_id)
+        acels = lista_aceleracoes_longitudinais(leituras)
+        acel_por_leitura = {l.id: a for l, a in zip(leituras, acels)}
 
         detectados = []
         for detector in self.__detectores:
             for evento in detector.detectar(leituras, rota):
                 detectados.append((detector.get_metodo(), evento))
 
-        existentes = {(e.leitura_id, e.metodo) for e in self.__evento_repository.get_by_rota(rota_id)}
-
+        existentes = set()
         novos = []
         for metodo, evento in detectados:
             leitura = evento["leitura"]
             if (leitura.id, metodo) in existentes:
                 continue
             existentes.add((leitura.id, metodo))
+            acel = acel_por_leitura.get(leitura.id, 0.0)
             novos.append(EventoRisco(
                 leitura_id=leitura.id,
                 rota_id=rota_id,
@@ -53,7 +59,7 @@ class AnaliseService:
                 metodo=metodo,
                 forca_g=evento.get("forca_g"),
                 instabilidade=evento.get("instabilidade"),
-                classificacao="RISCO",
+                classificacao=classificar_risco(leitura, acel),
                 descricao=evento.get("descricao"),
             ))
 
@@ -62,14 +68,14 @@ class AnaliseService:
         return novos
 
     def grafico_rota(self, rota_id: int):
-        """Retorna os dados para o gráfico: Força G e aceleração ao longo do tempo."""
+        """Retorna os dados para o gráfico: velocidade e tipo de risco ao longo do tempo."""
         rota = self.__rota_repository.get_by_id(rota_id)
         if not rota:
             return None
 
         leituras = self.__leitura_repository.get_by_rota(rota_id)
         eventos = self.__evento_repository.get_by_rota(rota_id)
-        leituras_risco = {e.leitura_id for e in eventos}
+        tipo_por_leitura = {e.leitura_id: e.classificacao for e in eventos}
 
         if not leituras:
             return {"rota_id": rota_id, "nome": rota.nome, "pontos": []}
@@ -84,7 +90,8 @@ class AnaliseService:
                 "velocidade": leitura.velocidade,
                 "forca_g": forca_g_resultante(leitura),
                 "acel_longitudinal": acels[i],
-                "risco": leitura.id in leituras_risco,
+                "risco": leitura.id in tipo_por_leitura,
+                "classificacao": tipo_por_leitura.get(leitura.id),
             })
 
         return {"rota_id": rota_id, "nome": rota.nome, "pontos": pontos}
