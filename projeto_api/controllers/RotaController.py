@@ -1,0 +1,136 @@
+from flask_restful import Resource, abort, request
+from flask_apispec import marshal_with, use_kwargs
+from flask_apispec.views import MethodResource
+from marshmallow import ValidationError
+from sqlalchemy.exc import IntegrityError, OperationalError
+
+from controllers.schemas import (
+    EventoRiscoResponseSchema,
+    ImportarRequestSchema,
+    RotaRequestSchema,
+    RotaResponseSchema,
+)
+from services.AnaliseService import AnaliseService
+from services.ImportadorService import ImportadorService
+from services.RotaService import RotaService
+
+
+class RotaList(MethodResource, Resource):
+
+    def __init__(self):
+        self.__service = RotaService()
+
+    @marshal_with(RotaResponseSchema(many=True))
+    def get(self):
+        try:
+            usuario_id = request.args.get("usuario_id", type=int)
+            if usuario_id is not None:
+                return self.__service.get_by_usuario(usuario_id), 200
+            return self.__service.get_all(), 200
+        except OperationalError:
+            abort(500, message="Erro interno do servidor.")
+
+    @use_kwargs(RotaRequestSchema, location="json")
+    @marshal_with(RotaResponseSchema)
+    def post(self, **kwargs):
+        try:
+            return self.__service.add(**kwargs), 201
+        except ValidationError as e:
+            abort(400, message=str(e))
+        except OperationalError:
+            abort(500, message="Erro interno do servidor.")
+
+
+class RotaItem(MethodResource, Resource):
+
+    def __init__(self):
+        self.__service = RotaService()
+
+    @marshal_with(RotaResponseSchema)
+    def get(self, rota_id):
+        try:
+            rota = self.__service.get_by_id(rota_id)
+            if not rota:
+                abort(404, message="Rota não encontrada.")
+            return rota, 200
+        except OperationalError:
+            abort(500, message="Erro interno do servidor.")
+
+    @use_kwargs(RotaRequestSchema, location="json")
+    @marshal_with(RotaResponseSchema)
+    def put(self, rota_id, **kwargs):
+        try:
+            rota = self.__service.update(rota_id, kwargs.get("nome"))
+            if not rota:
+                abort(404, message="Rota não encontrada.")
+            return rota, 200
+        except ValidationError as e:
+            abort(400, message=str(e))
+        except OperationalError:
+            abort(500, message="Erro interno do servidor.")
+
+    def delete(self, rota_id):
+        try:
+            rota = self.__service.delete(rota_id)
+            if not rota:
+                abort(404, message="Rota não encontrada.")
+            return {"message": "Rota excluída com sucesso."}, 200
+        except IntegrityError:
+            abort(409, message="Não é possível excluir: há leituras ou eventos vinculados.")
+        except OperationalError:
+            abort(500, message="Erro interno do servidor.")
+
+
+class RotaImportar(MethodResource, Resource):
+    """Importa um CSV de telemetria, criando a rota e suas leituras."""
+
+    def __init__(self):
+        self.__importador = ImportadorService()
+
+    @use_kwargs(ImportarRequestSchema, location="json")
+    def post(self, **kwargs):
+        try:
+            resultado = self.__importador.importar_csv(
+                kwargs["usuario_id"],
+                kwargs["nome"],
+                kwargs.get("arquivo_origem"),
+                kwargs["conteudo_csv"],
+            )
+            return resultado, 201
+        except ValidationError as e:
+            abort(400, message=str(e))
+        except OperationalError:
+            abort(500, message="Erro interno do servidor.")
+
+
+class RotaAnalisar(MethodResource, Resource):
+    """Executa a detecção de eventos de risco sobre a rota."""
+
+    def __init__(self):
+        self.__analise = AnaliseService()
+
+    @marshal_with(EventoRiscoResponseSchema(many=True))
+    def post(self, rota_id):
+        try:
+            eventos = self.__analise.analisar_rota(rota_id)
+            if eventos is None:
+                abort(404, message="Rota não encontrada.")
+            return eventos, 200
+        except OperationalError:
+            abort(500, message="Erro interno do servidor.")
+
+
+class RotaGrafico(MethodResource, Resource):
+    """Retorna os dados para o gráfico de comportamento da rota."""
+
+    def __init__(self):
+        self.__analise = AnaliseService()
+
+    def get(self, rota_id):
+        try:
+            dados = self.__analise.grafico_rota(rota_id)
+            if not dados:
+                abort(404, message="Rota não encontrada.")
+            return dados, 200
+        except OperationalError:
+            abort(500, message="Erro interno do servidor.")

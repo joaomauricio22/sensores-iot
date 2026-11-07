@@ -11,8 +11,8 @@ class EventoRiscoRepository:
     def get_by_id(self, evento_id):
         return db.session.get(EventoRisco, evento_id)
 
-    def get_by_veiculo(self, veiculo_id):
-        return db.session.query(EventoRisco).filter(EventoRisco.veiculo_id == veiculo_id).all()
+    def get_by_rota(self, rota_id):
+        return db.session.query(EventoRisco).filter(EventoRisco.rota_id == rota_id).all()
 
     def get_by_leitura_metodo(self, leitura_id, metodo):
         return (

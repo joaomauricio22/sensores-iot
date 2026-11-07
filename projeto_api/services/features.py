@@ -1,39 +1,54 @@
 """Funções de extração de atributos (feature engineering) da telemetria.
 
-Extrai indicadores físicos a partir dos dados brutos do OBD-II:
-  - Força G resultante (magnitude da aceleração triaxial em unidades de g);
-  - Instabilidade temporal (desvio padrão da aceleração numa janela).
+Alinhado à metodologia de análise:
+  - aceleração longitudinal (derivada da velocidade, em m/s²);
+  - Força G resultante (magnitude horizontal da aceleração: √(ax² + ay²), em m/s²);
+  - janela deslizante de 3 leituras (média e desvio padrão = instabilidade).
 """
 import math
 import statistics
 
 
-def forca_g(leitura) -> float:
-    """Força G resultante de uma leitura, em g (m/s² dividido por 9,81)."""
-    if leitura.accel_x is None or leitura.accel_y is None or leitura.accel_z is None:
+def forca_g_resultante(leitura) -> float:
+    """Magnitude horizontal da aceleração: √(ax² + ay²), em m/s²."""
+    if leitura.accel_x is None or leitura.accel_y is None:
         return None
-    return math.sqrt(
-        leitura.accel_x ** 2 + leitura.accel_y ** 2 + leitura.accel_z ** 2
-    ) / 9.81
+    return math.sqrt(leitura.accel_x ** 2 + leitura.accel_y ** 2)
 
 
-def magnitude_aceleracao(leitura) -> float:
-    """Magnitude da aceleração (m/s²) sem normalizar por g."""
-    if leitura.accel_x is None or leitura.accel_y is None or leitura.accel_z is None:
-        return None
-    return math.sqrt(leitura.accel_x ** 2 + leitura.accel_y ** 2 + leitura.accel_z ** 2)
-
-
-def instabilidade_janela(leituras, indice, raio=3) -> float:
-    """Desvio padrão da magnitude da aceleração numa janela ao redor do índice."""
-    inicio = max(0, indice - raio)
-    fim = min(len(leituras), indice + raio + 1)
-    magnitudes = [m for m in (magnitude_aceleracao(l) for l in leituras[inicio:fim]) if m is not None]
-    if len(magnitudes) < 2:
+def aceleracao_longitudinal(leituras, indice) -> float:
+    """Aceleração longitudinal derivada da velocidade (Δv/Δt), em m/s²."""
+    if indice == 0:
         return 0.0
-    return statistics.stdev(magnitudes)
+    atual = leituras[indice]
+    anterior = leituras[indice - 1]
+    if atual.velocidade is None or anterior.velocidade is None:
+        return 0.0
+    dt = (atual.data_hora - anterior.data_hora).total_seconds()
+    if dt <= 0:
+        return 0.0
+    dv = atual.velocidade - anterior.velocidade  # km/h
+    return (dv / 3.6) / dt  # conversão para m/s²
 
 
-def forcas_g(leituras) -> list:
-    """Lista de forças G de um conjunto de leituras (ignora valores ausentes)."""
-    return [g for g in (forca_g(l) for l in leituras) if g is not None]
+def lista_aceleracoes_longitudinais(leituras) -> list:
+    return [aceleracao_longitudinal(leituras, i) for i in range(len(leituras))]
+
+
+def _janela_trailing(valores, indice, tamanho=3):
+    inicio = max(0, indice - tamanho + 1)
+    return valores[inicio:indice + 1]
+
+
+def media_janela(valores, indice, tamanho=3) -> float:
+    """Média móvel da janela de 3 leituras (~3 s)."""
+    janela = _janela_trailing(valores, indice, tamanho)
+    return statistics.mean(janela) if janela else 0.0
+
+
+def instabilidade_janela(valores, indice, tamanho=3) -> float:
+    """Desvio padrão da janela de 3 leituras (~3 s) — mede a instabilidade."""
+    janela = _janela_trailing(valores, indice, tamanho)
+    if len(janela) < 2:
+        return 0.0
+    return statistics.stdev(janela)

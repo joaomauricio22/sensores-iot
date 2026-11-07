@@ -1,26 +1,34 @@
 from services.detectors.DetectorAnomalia import DetectorAnomalia
-from services.features import forca_g, instabilidade_janela
+from services.features import (
+    aceleracao_longitudinal,
+    forca_g_resultante,
+    instabilidade_janela,
+    lista_aceleracoes_longitudinais,
+)
 
 
-# Método 1 - Limite físico:
-# considera evento de risco uma leitura cuja Força G resultante ultrapassa
-# um limiar de referência (manobras agressivas: frenagem/aceleração/curva bruscas).
+# Método 1 - Limites físicos (Código de Trânsito Brasileiro - CTB):
+# considera evento de risco uma leitura cuja aceleração longitudinal
+# ultrapassa +2,5 m/s² (aceleração brusca) ou fica abaixo de -3,0 m/s² (frenagem brusca).
 class LimiteDetector(DetectorAnomalia):
 
-    LIMIAR_FORCA_G = 0.5  # em g
+    LIMITE_ACELERACAO = 2.5   # m/s²
+    LIMITE_FRENAGEM = -3.0    # m/s²
 
-    def detectar(self, leituras, veiculo):
+    def detectar(self, leituras, rota):
+        acels = lista_aceleracoes_longitudinais(leituras)
         eventos = []
         for i, leitura in enumerate(leituras):
-            fg = forca_g(leitura)
-            if fg is None:
-                continue
-            if fg > self.LIMIAR_FORCA_G:
+            acel = acels[i]
+            if acel > self.LIMITE_ACELERACAO or acel < self.LIMITE_FRENAGEM:
                 eventos.append({
                     "leitura": leitura,
-                    "forca_g": fg,
-                    "instabilidade": instabilidade_janela(leituras, i),
-                    "descricao": f"Força G de {fg:.2f}g acima do limiar de {self.LIMIAR_FORCA_G}g.",
+                    "forca_g": forca_g_resultante(leitura),
+                    "instabilidade": instabilidade_janela(acels, i),
+                    "descricao": (
+                        f"Aceleração longitudinal de {acel:.2f} m/s² "
+                        f"(limite CTB: {self.LIMITE_FRENAGEM} a {self.LIMITE_ACELERACAO} m/s²)."
+                    ),
                 })
         return eventos
 

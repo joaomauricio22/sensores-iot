@@ -11,19 +11,19 @@ class LeituraRepository:
     def get_by_id(self, leitura_id):
         return db.session.get(Leitura, leitura_id)
 
-    def get_by_veiculo(self, veiculo_id):
-        """Leituras de um veículo, ordenadas pelo instante de coleta."""
+    def get_by_rota(self, rota_id):
+        """Leituras de uma rota, ordenadas pelo instante de coleta."""
         return (
             db.session.query(Leitura)
-            .filter(Leitura.veiculo_id == veiculo_id)
+            .filter(Leitura.rota_id == rota_id)
             .order_by(Leitura.data_hora)
             .all()
         )
 
-    def find_duplicada(self, veiculo_id, data_hora):
+    def find_duplicada(self, rota_id, data_hora):
         return (
             db.session.query(Leitura)
-            .filter(Leitura.veiculo_id == veiculo_id, Leitura.data_hora == data_hora)
+            .filter(Leitura.rota_id == rota_id, Leitura.data_hora == data_hora)
             .first()
         )
 

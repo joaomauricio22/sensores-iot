@@ -28,7 +28,7 @@ class LeituraList(MethodResource, Resource):
         except ValidationError as e:
             abort(400, message=str(e))
         except IntegrityError:
-            abort(409, message="Já existe uma leitura para este veículo nesse instante.")
+            abort(409, message="Já existe uma leitura para esta rota nesse instante.")
         except OperationalError:
             abort(500, message="Erro interno do servidor.")
 
@@ -58,8 +58,6 @@ class LeituraItem(MethodResource, Resource):
             return leitura, 200
         except ValidationError as e:
             abort(400, message=str(e))
-        except IntegrityError:
-            abort(409, message="Já existe uma leitura para este veículo nesse instante.")
         except OperationalError:
             abort(500, message="Erro interno do servidor.")
 

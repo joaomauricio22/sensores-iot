@@ -1,50 +1,47 @@
 # Schemas (DTOs) da API.
-# Cada entidade possui um RequestSchema (valida/parseia a entrada)
-# e um ResponseSchema (serializa a saída para JSON).
 from marshmallow import Schema, fields
 
 
-class VeiculoResponseSchema(Schema):
+class UsuarioResponseSchema(Schema):
     id = fields.Int()
-    identificador = fields.Str()
-    modelo = fields.Str(allow_none=True)
+    nome = fields.Str()
     data_cadastro = fields.DateTime()
 
 
-class VeiculoRequestSchema(Schema):
-    identificador = fields.Str(required=True)
-    modelo = fields.Str(allow_none=True)
-
-
-class ParametroResponseSchema(Schema):
-    id = fields.Int()
-    nome = fields.Str()
-    unidade = fields.Str()
-    limite_min = fields.Float()
-    limite_max = fields.Float()
-
-
-class ParametroRequestSchema(Schema):
+class UsuarioRequestSchema(Schema):
     nome = fields.Str(required=True)
-    unidade = fields.Str(required=True)
-    limite_min = fields.Float(required=True)
-    limite_max = fields.Float(required=True)
+    senha = fields.Str(required=True)
 
 
-class MapeamentoResponseSchema(Schema):
+class LoginRequestSchema(Schema):
+    nome = fields.Str(required=True)
+    senha = fields.Str(required=True)
+
+
+class RotaResponseSchema(Schema):
     id = fields.Int()
-    nome_bruto = fields.Str()
-    parametro_id = fields.Int()
+    usuario_id = fields.Int()
+    nome = fields.Str()
+    arquivo_origem = fields.Str(allow_none=True)
+    data_importacao = fields.DateTime()
 
 
-class MapeamentoRequestSchema(Schema):
-    nome_bruto = fields.Str(required=True)
-    parametro_id = fields.Int(required=True)
+class RotaRequestSchema(Schema):
+    usuario_id = fields.Int(required=True)
+    nome = fields.Str(required=True)
+    arquivo_origem = fields.Str(allow_none=True)
+
+
+class ImportarRequestSchema(Schema):
+    usuario_id = fields.Int(required=True)
+    nome = fields.Str(required=True)
+    arquivo_origem = fields.Str(allow_none=True)
+    conteudo_csv = fields.Str(required=True)
 
 
 class LeituraResponseSchema(Schema):
     id = fields.Int()
-    veiculo_id = fields.Int()
+    rota_id = fields.Int()
     data_hora = fields.DateTime()
     velocidade = fields.Float(allow_none=True)
     rpm = fields.Float(allow_none=True)
@@ -57,7 +54,7 @@ class LeituraResponseSchema(Schema):
 
 
 class LeituraRequestSchema(Schema):
-    veiculo_id = fields.Int(required=True)
+    rota_id = fields.Int(required=True)
     data_hora = fields.DateTime(required=True)
     velocidade = fields.Float(allow_none=True)
     rpm = fields.Float(allow_none=True)
@@ -72,7 +69,7 @@ class LeituraRequestSchema(Schema):
 class EventoRiscoResponseSchema(Schema):
     id = fields.Int()
     leitura_id = fields.Int()
-    veiculo_id = fields.Int()
+    rota_id = fields.Int()
     forca_g = fields.Float(allow_none=True)
     instabilidade = fields.Float(allow_none=True)
     classificacao = fields.Str(allow_none=True)
@@ -83,7 +80,7 @@ class EventoRiscoResponseSchema(Schema):
 
 class EventoRiscoRequestSchema(Schema):
     leitura_id = fields.Int(required=True)
-    veiculo_id = fields.Int(required=True)
+    rota_id = fields.Int(required=True)
     data_hora = fields.DateTime(required=True)
     metodo = fields.Str(required=True)
     forca_g = fields.Float(allow_none=True)

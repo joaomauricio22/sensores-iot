@@ -1,4 +1,4 @@
-from flask_restful import Resource, abort
+from flask_restful import Resource, abort, request
 from flask_apispec import marshal_with, use_kwargs
 from flask_apispec.views import MethodResource
 from marshmallow import ValidationError
@@ -16,6 +16,9 @@ class EventoRiscoList(MethodResource, Resource):
     @marshal_with(EventoRiscoResponseSchema(many=True))
     def get(self):
         try:
+            rota_id = request.args.get("rota_id", type=int)
+            if rota_id is not None:
+                return self.__service.get_by_rota(rota_id), 200
             return self.__service.get_all(), 200
         except OperationalError:
             abort(500, message="Erro interno do servidor.")
@@ -58,8 +61,6 @@ class EventoRiscoItem(MethodResource, Resource):
             return evento, 200
         except ValidationError as e:
             abort(400, message=str(e))
-        except IntegrityError:
-            abort(409, message="Violação de integridade no banco de dados.")
         except OperationalError:
             abort(500, message="Erro interno do servidor.")
 

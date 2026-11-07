@@ -3,13 +3,10 @@ from marshmallow import ValidationError
 from entities.EventoRisco import EventoRisco
 from repositories.EventoRiscoRepository import EventoRiscoRepository
 
-# Métodos de detecção aceitos pelo sistema.
 METODOS_VALIDOS = {"LIMITE", "ESTATISTICO", "MODELO_ML"}
 
 
 # Camada de serviço: regras de negócio e CRUD da entidade EventoRisco.
-# Em uso normal os eventos são gerados automaticamente pela análise,
-# mas a entidade também expõe as operações de CRUD (exigência do trabalho).
 class EventoRiscoService:
 
     def __init__(self):
@@ -21,10 +18,13 @@ class EventoRiscoService:
     def get_by_id(self, evento_id):
         return self.__repository.get_by_id(evento_id)
 
-    def add(self, leitura_id: int, veiculo_id: int, data_hora, metodo: str,
+    def get_by_rota(self, rota_id):
+        return self.__repository.get_by_rota(rota_id)
+
+    def add(self, leitura_id: int, rota_id: int, data_hora, metodo: str,
             forca_g=None, instabilidade=None, classificacao=None, descricao=None) -> EventoRisco:
-        if leitura_id is None or veiculo_id is None:
-            raise ValidationError("A leitura e o veículo são obrigatórios.")
+        if leitura_id is None or rota_id is None:
+            raise ValidationError("A leitura e a rota são obrigatórias.")
         if data_hora is None:
             raise ValidationError("A data/hora é obrigatória.")
         if not metodo or not str(metodo).strip():
@@ -34,7 +34,7 @@ class EventoRiscoService:
 
         evento = EventoRisco(
             leitura_id=leitura_id,
-            veiculo_id=veiculo_id,
+            rota_id=rota_id,
             data_hora=data_hora,
             metodo=metodo,
             forca_g=forca_g,
@@ -44,7 +44,7 @@ class EventoRiscoService:
         )
         return self.__repository.add(evento)
 
-    def update(self, evento_id: int, leitura_id: int, veiculo_id: int, data_hora,
+    def update(self, evento_id: int, leitura_id: int, rota_id: int, data_hora,
                metodo: str, forca_g=None, instabilidade=None, classificacao=None, descricao=None):
         evento = self.__repository.get_by_id(evento_id)
         if not evento:
@@ -52,7 +52,7 @@ class EventoRiscoService:
         if metodo not in METODOS_VALIDOS:
             raise ValidationError("Método inválido. Use um destes: LIMITE, ESTATISTICO ou MODELO_ML.")
         evento.leitura_id = leitura_id
-        evento.veiculo_id = veiculo_id
+        evento.rota_id = rota_id
         evento.data_hora = data_hora
         evento.metodo = metodo
         evento.forca_g = forca_g

@@ -1,19 +1,23 @@
 import statistics
 
 from services.detectors.DetectorAnomalia import DetectorAnomalia
-from services.features import forca_g, instabilidade_janela
+from services.features import (
+    forca_g_resultante,
+    instabilidade_janela,
+    lista_aceleracoes_longitudinais,
+)
 
 
 # Método 2 - Análise estatística (padrão histórico):
-# calcula a média e o desvio padrão da Força G do histórico do veículo e usa o
-# z-score. Leituras com |z-score| acima do limiar são consideradas significativamente
-# diferentes do padrão de condução (comportamento de risco).
+# calcula a média e o desvio padrão da Força G resultante do histórico da rota
+# e usa o z-score. Leituras com |z-score| acima do limiar são consideradas
+# significativamente diferentes do padrão de condução.
 class EstatisticoDetector(DetectorAnomalia):
 
     LIMIAR_ZSCORE = 3.0
 
-    def detectar(self, leituras, veiculo):
-        forcas = [forca_g(l) for l in leituras if forca_g(l) is not None]
+    def detectar(self, leituras, rota):
+        forcas = [forca_g_resultante(l) for l in leituras if forca_g_resultante(l) is not None]
         if len(forcas) < 2:
             return []
 
@@ -22,9 +26,10 @@ class EstatisticoDetector(DetectorAnomalia):
         if desvio == 0:
             return []
 
+        acels = lista_aceleracoes_longitudinais(leituras)
         eventos = []
         for i, leitura in enumerate(leituras):
-            fg = forca_g(leitura)
+            fg = forca_g_resultante(leitura)
             if fg is None:
                 continue
             zscore = abs(fg - media) / desvio
@@ -32,8 +37,8 @@ class EstatisticoDetector(DetectorAnomalia):
                 eventos.append({
                     "leitura": leitura,
                     "forca_g": fg,
-                    "instabilidade": instabilidade_janela(leituras, i),
-                    "descricao": f"Força G de {fg:.2f}g com z-score {zscore:.1f} (acima de {self.LIMIAR_ZSCORE}).",
+                    "instabilidade": instabilidade_janela(acels, i),
+                    "descricao": f"Força G de {fg:.2f} m/s² com z-score {zscore:.1f} (acima de {self.LIMIAR_ZSCORE}).",
                 })
         return eventos
 

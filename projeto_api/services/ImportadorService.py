@@ -1,97 +1,114 @@
 import csv
+import io
 from datetime import datetime, timedelta
+
+from marshmallow import ValidationError
 
 from entities.Base import db
 from entities.Leitura import Leitura
-from entities.Veiculo import Veiculo
-from repositories.LeituraRepository import LeituraRepository
-from repositories.MapeamentoParametroRepository import MapeamentoParametroRepository
-from repositories.VeiculoRepository import VeiculoRepository
+from entities.Rota import Rota
+from repositories.RotaRepository import RotaRepository
+from repositories.UsuarioRepository import UsuarioRepository
 
 
-# Camada de serviço responsável pela importação e padronização dos dados.
-#
-# Arquivos de telemetria de fontes diferentes usam nomes de colunas diferentes
-# para a mesma grandeza (ex.: "Vehicle speed (km/h)" e "Velocidade do veículo
-# (km/h)"). O importador usa a tabela MapeamentoParametro para traduzir cada
-# nome bruto para um parâmetro canônico, ignorando colunas não mapeadas.
+# Padronização dos parâmetros (back-end): traduz os nomes brutos das colunas
+# dos arquivos para os atributos canônicos da entidade Leitura.
+# Colunas não mapeadas são ignoradas na importação.
+MAPEAMENTO_PADRAO = {
+    "Velocidade do veículo (km/h)": "velocidade",
+    "Vehicle speed (km/h)": "velocidade",
+    "RPM do motor (RPM)": "rpm",
+    "Engine RPM (RPM)": "rpm",
+    "Aceleração X (m/s²)": "accel_x",
+    "Accel X (m/s²)": "accel_x",
+    "Acelere Y (m/s²)": "accel_y",
+    "Accel Y (m/s²)": "accel_y",
+    "Aceleração Z (m/s²)": "accel_z",
+    "Accel Z (m/s²)": "accel_z",
+    "Posição absoluta do acelerador (%)": "posicao_acelerador",
+    "Absolute throttle position (%)": "posicao_acelerador",
+    "Latitude (deg)": "latitude",
+    "Longitude (deg)": "longitude",
+}
+
+
+# Camada de serviço responsável pela importação de um CSV de telemetria,
+# criando a Rota e as Leituras correspondentes, com padronização dos parâmetros.
 class ImportadorService:
 
     def __init__(self):
-        self.__veiculo_repository = VeiculoRepository()
-        self.__mapeamento_repository = MapeamentoParametroRepository()
-        self.__leitura_repository = LeituraRepository()
+        self.__rota_repository = RotaRepository()
+        self.__usuario_repository = UsuarioRepository()
 
-    def importar_csv(self, caminho: str, identificador_veiculo: str, modelo: str = None) -> dict:
-        """Importa um CSV, padronizando os parâmetros para o veículo informado."""
-        veiculo = self.__veiculo_repository.get_by_identificador(identificador_veiculo)
-        if not veiculo:
-            veiculo = self.__veiculo_repository.add(
-                Veiculo(identificador=identificador_veiculo, modelo=modelo)
-            )
+    def importar_csv(self, usuario_id: int, nome: str, arquivo_origem: str, conteudo_csv: str) -> dict:
+        """Importa um CSV (texto) para um usuário, criando a Rota e as Leituras."""
+        if self.__usuario_repository.get_by_id(usuario_id) is None:
+            raise ValidationError("Usuário não cadastrado.")
+        if not nome or not str(nome).strip():
+            raise ValidationError("O nome da rota é obrigatório.")
 
-        # Mapa de padronização: nome bruto -> parâmetro canônico.
-        mapeamentos = {m.nome_bruto: m.parametro for m in self.__mapeamento_repository.get_all()}
+        rota = self.__rota_repository.add(
+            Rota(usuario_id=usuario_id, nome=nome, arquivo_origem=arquivo_origem)
+        )
 
-        with open(caminho, encoding="utf-8-sig", errors="replace", newline="") as fh:
-            reader = csv.reader(fh)
-            start_time = None
-            colunas = []
+        leituras = self.__parse(rota.id, conteudo_csv)
+        db.session.add_all(leituras)
+        db.session.commit()
 
-            # Varre as linhas até encontrar o cabeçalho (a que começa com "Time").
-            for row in reader:
-                if not row:
-                    continue
-                primeiro = row[0].strip()
-                if primeiro.startswith("# StartTime"):
-                    start_time = self.__parse_start_time(row[0])
-                elif primeiro.lower().startswith("time"):
-                    colunas = [c.strip() for c in row]
-                    break
+        return {"rota_id": rota.id, "total_leituras": len(leituras)}
 
-            if start_time is None:
-                raise ValueError(f"StartTime não encontrado no arquivo {caminho}.")
+    def __parse(self, rota_id: int, conteudo_csv: str) -> list:
+        reader = csv.reader(io.StringIO(conteudo_csv))
+        start_time = None
+        colunas = []
 
-            indice_time = next(
-                (i for i, c in enumerate(colunas) if c.lower().startswith("time")), None
-            )
-            indice_parametro = {}
-            for i, nome in enumerate(colunas):
-                if nome in mapeamentos:
-                    indice_parametro[i] = mapeamentos[nome]
+        for row in reader:
+            if not row:
+                continue
+            primeiro = row[0].strip()
+            if primeiro.startswith("# StartTime"):
+                start_time = self.__parse_start_time(row[0])
+            elif primeiro.lower().startswith("time"):
+                colunas = [c.strip() for c in row]
+                break
 
-            # Instantes já existentes (para evitar duplicatas em memória).
-            existentes = {l.data_hora for l in self.__leitura_repository.get_by_veiculo(veiculo.id)}
+        if start_time is None:
+            raise ValidationError("StartTime não encontrado no arquivo CSV.")
 
-            leituras_novas = []
-            for row in reader:
-                if not row:
-                    continue
-                try:
-                    offset = float(row[indice_time]) if indice_time is not None else 0.0
-                except (ValueError, IndexError, TypeError):
-                    continue
-                data_hora = start_time + timedelta(seconds=offset)
+        indice_time = next(
+            (i for i, c in enumerate(colunas) if c.lower().startswith("time")), None
+        )
+        indice_atributo = {}
+        for i, nome in enumerate(colunas):
+            if nome in MAPEAMENTO_PADRAO:
+                indice_atributo[i] = MAPEAMENTO_PADRAO[nome]
 
-                if data_hora in existentes:
-                    continue
-                existentes.add(data_hora)
+        existentes = set()
+        leituras = []
+        for row in reader:
+            if not row:
+                continue
+            try:
+                offset = float(row[indice_time]) if indice_time is not None else 0.0
+            except (ValueError, IndexError, TypeError):
+                continue
+            data_hora = start_time + timedelta(seconds=offset)
 
-                dados = {}
-                for i, parametro in indice_parametro.items():
-                    if i < len(row) and row[i].strip() != "":
-                        try:
-                            dados[parametro.nome] = float(row[i])
-                        except ValueError:
-                            pass
+            if data_hora in existentes:
+                continue
+            existentes.add(data_hora)
 
-                leituras_novas.append(Leitura(veiculo_id=veiculo.id, data_hora=data_hora, **dados))
+            dados = {}
+            for i, atributo in indice_atributo.items():
+                if i < len(row) and row[i].strip() != "":
+                    try:
+                        dados[atributo] = float(row[i])
+                    except ValueError:
+                        pass
 
-            # Commit em lote (uma única transação).
-            db.session.add_all(leituras_novas)
-            db.session.commit()
+            leituras.append(Leitura(rota_id=rota_id, data_hora=data_hora, **dados))
 
-        return {"veiculo_id": veiculo.id, "total_importadas": len(leituras_novas)}
+        return leituras
 
     @staticmethod
     def __parse_start_time(linha: str) -> datetime:

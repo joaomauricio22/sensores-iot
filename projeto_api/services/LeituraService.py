@@ -4,7 +4,7 @@ from marshmallow import ValidationError
 
 from entities.Leitura import Leitura
 from repositories.LeituraRepository import LeituraRepository
-from repositories.VeiculoRepository import VeiculoRepository
+from repositories.RotaRepository import RotaRepository
 
 
 # Camada de serviço: regras de negócio da Leitura (frame de telemetria).
@@ -12,7 +12,7 @@ class LeituraService:
 
     def __init__(self):
         self.__repository = LeituraRepository()
-        self.__veiculo_repository = VeiculoRepository()
+        self.__rota_repository = RotaRepository()
 
     def get_all(self):
         return self.__repository.get_all()
@@ -20,18 +20,18 @@ class LeituraService:
     def get_by_id(self, leitura_id):
         return self.__repository.get_by_id(leitura_id)
 
-    def add(self, veiculo_id: int, data_hora, velocidade=None, rpm=None,
+    def add(self, rota_id: int, data_hora, velocidade=None, rpm=None,
             accel_x=None, accel_y=None, accel_z=None, posicao_acelerador=None,
             latitude=None, longitude=None) -> Leitura:
-        # Regra 2: dados obrigatórios (veículo e data/hora).
-        if veiculo_id is None:
-            raise ValidationError("O veículo é obrigatório.")
+        # Regra 2: dados obrigatórios.
+        if rota_id is None:
+            raise ValidationError("A rota é obrigatória.")
         if data_hora is None:
             raise ValidationError("A data/hora da coleta é obrigatória.")
 
-        # Regra 3: veículo cadastrado.
-        if self.__veiculo_repository.get_by_id(veiculo_id) is None:
-            raise ValidationError("Não é possível registrar leitura para um veículo não cadastrado.")
+        # Regra 3: rota cadastrada.
+        if self.__rota_repository.get_by_id(rota_id) is None:
+            raise ValidationError("Não é possível registrar leitura para uma rota não cadastrada.")
 
         # Regra 4: valores numéricos e finitos.
         valores = {
@@ -45,23 +45,21 @@ class LeituraService:
             "longitude": self.__validar_numero(longitude, "longitude"),
         }
 
-        # Regra 5: sem frames duplicados (mesmo veículo + instante).
-        if self.__repository.find_duplicada(veiculo_id, data_hora):
-            raise ValidationError("Já existe uma leitura para este veículo nesse instante.")
+        # Regra 5: sem frames duplicados.
+        if self.__repository.find_duplicada(rota_id, data_hora):
+            raise ValidationError("Já existe uma leitura para esta rota nesse instante.")
 
-        leitura = Leitura(veiculo_id=veiculo_id, data_hora=data_hora, **valores)
+        leitura = Leitura(rota_id=rota_id, data_hora=data_hora, **valores)
         return self.__repository.add(leitura)
 
-    def update(self, leitura_id: int, veiculo_id: int, data_hora, velocidade=None,
+    def update(self, leitura_id: int, rota_id: int, data_hora, velocidade=None,
                rpm=None, accel_x=None, accel_y=None, accel_z=None,
                posicao_acelerador=None, latitude=None, longitude=None):
         leitura = self.__repository.get_by_id(leitura_id)
         if not leitura:
             return None
-
-        if self.__veiculo_repository.get_by_id(veiculo_id) is None:
-            raise ValidationError("Não é possível registrar leitura para um veículo não cadastrado.")
-
+        if self.__rota_repository.get_by_id(rota_id) is None:
+            raise ValidationError("Não é possível registrar leitura para uma rota não cadastrada.")
         valores = {
             "velocidade": self.__validar_numero(velocidade, "velocidade"),
             "rpm": self.__validar_numero(rpm, "rpm"),
@@ -72,12 +70,7 @@ class LeituraService:
             "latitude": self.__validar_numero(latitude, "latitude"),
             "longitude": self.__validar_numero(longitude, "longitude"),
         }
-
-        duplicada = self.__repository.find_duplicada(veiculo_id, data_hora)
-        if duplicada and duplicada.id != leitura.id:
-            raise ValidationError("Já existe uma leitura para este veículo nesse instante.")
-
-        leitura.veiculo_id = veiculo_id
+        leitura.rota_id = rota_id
         leitura.data_hora = data_hora
         for campo, valor in valores.items():
             setattr(leitura, campo, valor)

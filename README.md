@@ -4,12 +4,9 @@ Sistema para **receber, padronizar, armazenar e analisar dados de telemetria vei
 coletados via interface **OBD-II**, identificando **eventos de condução de risco**
 (frenagens bruscas, acelerações intensas, curvas fechadas).
 
-O pipeline de análise integra aprendizagem **não supervisionada (DBSCAN)** e
-**supervisionada (RandomForest)**.
-
 - **Aluno:** João Maurício Araújo Leitão
 - **Modalidade:** Individual
-- **Tecnologias:** Python, Flask (Flask-RESTful), SQLAlchemy, PostgreSQL, scikit-learn, Tkinter, Docker
+- **Tecnologias:** Python, Flask (Flask-RESTful), SQLAlchemy, PostgreSQL, scikit-learn, matplotlib, Tkinter, Docker
 
 ## Estrutura do projeto
 
@@ -20,49 +17,41 @@ Trabalho_PAV/
 │   ├── repositories/       # Operações no banco de dados
 │   ├── services/           # Regras de negócio + importação + análise
 │   │   ├── detectors/      # Detectores de risco (herança/polimorfismo)
-│   │   ├── features.py     # Extração de atributos (Força G, instabilidade)
-│   │   └── ImportadorService.py  # Padronização de parâmetros dos CSVs
+│   │   ├── features.py     # Extração de atributos (Força G, aceleração, instabilidade)
+│   │   └── ImportadorService.py  # Importação e padronização dos CSVs
 │   ├── controllers/        # Recebimento das requisições HTTP
 │   ├── routes/             # Mapeamento de URLs
 │   ├── config/             # Configuração (conexão com o banco)
 │   ├── app.py              # Ponto de entrada da API
 │   ├── init.sql            # Script de criação do banco
-│   ├── seed.py             # Cria catálogo/mapa e importa os CSVs reais
+│   ├── seed.py             # Importa os CSVs como rotas do primeiro usuário
 │   ├── test_api.py         # Testes dos endpoints e regras
+│   ├── dados/              # Arquivos CSV de telemetria (não versionados)
 │   ├── Dockerfile
 │   ├── docker-compose.yml
 │   └── requirements.txt
 │
 ├── projeto_interface/      # Parte 4 (interface gráfica Tkinter)
-│   ├── main.py
-│   ├── tabs.py
-│   ├── api_client.py
-│   └── README.md
+│   ├── main.py             # Login + janela principal
+│   ├── tabs.py             # Abas: Rotas, Eventos de Risco e Gráfico
+│   └── api_client.py
 │
 └── apresentacao/           # Parte 6 (apresentação)
     └── slides_pav.pptx
 ```
 
-## Modelo de dados (5 tabelas)
+## Modelo de dados (4 tabelas)
 
 ```
-Parametro 1 ── N MapeamentoParametro
-Veiculo 1 ── N Leitura 1 ── N EventoRisco
+Usuario 1 ── N Rota 1 ── N Leitura 1 ── N EventoRisco
 ```
 
 | Tabela | Descrição |
 |---|---|
-| `veiculo` | Veículo monitorado (identificador único, modelo) |
-| `parametro` | Catálogo de parâmetros canônicos (nome, unidade, limites) |
-| `mapeamento_parametro` | Padronização: nome bruto da coluna → parâmetro canônico |
+| `usuario` | Usuário com acesso ao sistema (nome + senha) |
+| `rota` | Uma viagem importada (nome, arquivo de origem) |
 | `leitura` | Frame de telemetria (velocidade, rpm, acelerações, ...) |
 | `evento_risco` | Evento de risco detectado (Força G, instabilidade, método) |
-
-## Padronização de parâmetros
-
-Fontes diferentes nomeiam a mesma grandeza de formas distintas (ex.: `Vehicle speed
-(km/h)` e `Velocidade do veículo (km/h)`). A tabela `mapeamento_parametro` traduz cada
-nome bruto para um parâmetro canônico; colunas não mapeadas são ignoradas na importação.
 
 ## Regras de negócio (10)
 
@@ -82,22 +71,21 @@ nome bruto para um parâmetro canônico; colunas não mapeadas são ignoradas na
 
 ## Detecção de risco (3 métodos)
 
-- **LIMITE** — Força G resultante acima do limiar físico (0,5 g).
+- **LIMITE** — aceleração longitudinal fora dos limites do CTB (+2,5 / -3,0 m/s²).
 - **ESTATISTICO** — z-score da Força G em relação ao histórico.
 - **MODELO_ML** — DBSCAN (pseudo-rótulos) + RandomForest.
 
-A Força G resultante é `√(ax² + ay² + az²) / 9,81`; a instabilidade é o desvio padrão
-da aceleração numa janela de ~3 s.
+A Força G resultante é `√(ax² + ay²)`; a instabilidade é o desvio padrão da aceleração
+numa janela de ~3 s.
 
-## Como executar (com Docker)
+## Como executar
 
 ```bash
 cd projeto_api
-docker compose up --build -d        # sobe API (8080) + banco (5432)
-python seed.py                      # cria catálogo/mapa e importa os CSVs
+docker compose up --build -d    # sobe API (8080) + banco (5432)
 ```
 
-- API: http://localhost:8080/telemetria
+A API fica em `http://localhost:8080/telemetria`.
 
 Interface gráfica (roda fora do container):
 
@@ -106,15 +94,26 @@ cd projeto_interface
 python main.py
 ```
 
+Na interface: **crie uma conta** → entre → **importe um CSV** (dê um nome) → **analise** →
+veja o **gráfico** da Força G com os trechos de risco.
+
+Para popular os dados de exemplo (após criar o usuário pela interface):
+
+```bash
+cd projeto_api
+python seed.py
+```
+
 ## Endpoints principais
 
 | Método | Rota | Descrição |
 |---|---|---|
-| GET/POST | `/telemetria/veiculos` | Listar / cadastrar veículos |
-| GET/PUT/DELETE | `/telemetria/veiculos/<id>` | Selecionar / editar / excluir |
-| GET | `/telemetria/veiculos/<id>/estatisticas` | Estatísticas de condução (regra 10) |
-| POST | `/telemetria/veiculos/<id>/analisar` | Detecção de eventos de risco (7, 8, 9) |
-| GET/POST | `/telemetria/parametros` | Listar / cadastrar parâmetros |
-| GET/POST | `/telemetria/mapeamentos` | Listar / cadastrar mapeamentos |
+| GET/POST | `/telemetria/usuarios` | Listar / cadastrar usuários |
+| POST | `/telemetria/usuarios/login` | Autenticação |
+| GET/POST | `/telemetria/rotas` | Listar / cadastrar rotas |
+| POST | `/telemetria/rotas/importar` | Importar CSV como rota |
+| GET/PUT/DELETE | `/telemetria/rotas/<id>` | Selecionar / renomear / excluir |
+| POST | `/telemetria/rotas/<id>/analisar` | Detecção de eventos de risco |
+| GET | `/telemetria/rotas/<id>/grafico` | Dados para o gráfico |
 | GET/POST | `/telemetria/leituras` | Listar / cadastrar leituras |
 | GET/POST | `/telemetria/eventos-risco` | Listar / cadastrar eventos |
