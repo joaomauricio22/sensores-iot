@@ -1,5 +1,8 @@
 from marshmallow import ValidationError
 
+from entities.Base import db
+from entities.EventoRisco import EventoRisco
+from entities.Leitura import Leitura
 from entities.Rota import Rota
 from repositories.RotaRepository import RotaRepository
 from repositories.UsuarioRepository import UsuarioRepository
@@ -42,4 +45,9 @@ class RotaService:
         rota = self.__repository.get_by_id(rota_id)
         if not rota:
             return None
+        # Exclui em cascata: primeiro os eventos e as leituras vinculados,
+        # para não violar a chave estrangeira ao excluir a rota.
+        db.session.query(EventoRisco).filter(EventoRisco.rota_id == rota_id).delete()
+        db.session.query(Leitura).filter(Leitura.rota_id == rota_id).delete()
+        db.session.commit()
         return self.__repository.delete(rota)

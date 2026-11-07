@@ -1,8 +1,7 @@
 """Telas da interface gráfica (centrada no usuário).
 
-- RotaTab: lista as rotas do usuário, importa CSV, renomeia, exclui e analisa.
-- EventoRiscoTab: lista os eventos de risco da rota selecionada.
-- GraficoTab: gráfico da Força G ao longo do tempo, com os trechos de risco.
+- RotaTab: lista as rotas, importa CSV, renomeia, exclui e analisa.
+- GraficoTab: gráfico automático da Força G ao longo do tempo, com os trechos de risco.
 """
 import os
 import tkinter as tk
@@ -110,8 +109,10 @@ class RotaTab(tk.Frame):
             return
         if resp.status_code in (200, 201):
             dados = resp.json()
-            messagebox.showinfo("Sucesso", f"Rota '{nome}' importada com {dados['total_leituras']} leituras.")
+            self.app.rota_atual_id = dados["rota_id"]
             self.atualizar()
+            # gera o gráfico automaticamente para a rota recém-importada
+            self.app.mostrar_grafico()
         else:
             messagebox.showerror("Erro", extract_error(resp))
 
@@ -135,7 +136,11 @@ class RotaTab(tk.Frame):
             return
         if not messagebox.askyesno("Confirmar", "Excluir a rota selecionada?"):
             return
-        resp = self.app.api.excluir_rota(rota_id)
+        try:
+            resp = self.app.api.excluir_rota(rota_id)
+        except requests.exceptions.RequestException as e:
+            messagebox.showerror("Erro", f"Erro de comunicação com a API:\n{e}")
+            return
         if resp.status_code == 200:
             messagebox.showinfo("Sucesso", "Rota excluída.")
             self.atualizar()
@@ -157,55 +162,10 @@ class RotaTab(tk.Frame):
                 messagebox.showwarning("Análise", f"{len(eventos)} novo(s) evento(s) de risco detectado(s).")
             else:
                 messagebox.showinfo("Análise", "Nenhum novo evento de risco detectado.")
+            # atualiza o gráfico com os trechos de risco
+            self.app.mostrar_grafico()
         else:
             messagebox.showerror("Erro", extract_error(resp))
-
-
-class EventoRiscoTab(tk.Frame):
-
-    def __init__(self, master, app):
-        super().__init__(master, bg=BG)
-        self.app = app
-        self.tree = None
-        self._build()
-
-    def _build(self):
-        tk.Label(self, text="Eventos de Risco", font=("Segoe UI", 20, "bold"),
-                 bg=BG, fg="#2d3436").pack(pady=(15, 10))
-        _botao(self, "Atualizar", "#00b894", self.atualizar).pack(pady=6)
-
-        frame = tk.Frame(self, bg=BG)
-        frame.pack(fill="both", expand=True, padx=20, pady=(5, 15))
-        cols = ["data_hora", "metodo", "forca_g", "classificacao"]
-        self.tree = ttk.Treeview(frame, columns=cols, show="headings", height=12)
-        for key, label, width in [
-            ("data_hora", "Data/Hora", 180), ("metodo", "Método", 120),
-            ("forca_g", "Força G (m/s²)", 130), ("classificacao", "Classificação", 110),
-        ]:
-            self.tree.heading(key, text=label)
-            self.tree.column(key, width=width, anchor="center")
-        vsb = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=vsb.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        vsb.pack(side="right", fill="y")
-
-    def atualizar(self):
-        rota_id = self.app.rota_atual_id
-        for i in self.tree.get_children():
-            self.tree.delete(i)
-        if not rota_id:
-            return
-        try:
-            resp = self.app.api.list_eventos(rota_id)
-        except requests.exceptions.RequestException:
-            return
-        if resp.status_code != 200:
-            return
-        for e in resp.json():
-            fg = f"{e['forca_g']:.2f}" if e.get("forca_g") is not None else ""
-            self.tree.insert("", "end", values=(
-                e["data_hora"], e["metodo"], fg, e.get("classificacao") or "",
-            ))
 
 
 class GraficoTab(tk.Frame):
@@ -213,28 +173,36 @@ class GraficoTab(tk.Frame):
     def __init__(self, master, app):
         super().__init__(master, bg=BG)
         self.app = app
-        self.figure = Figure(figsize=(7, 4.2), dpi=100, facecolor=BG)
+        self.figure = Figure(figsize=(7, 4.4), dpi=100, facecolor=BG)
         self.canvas = FigureCanvasTkAgg(self.figure, master=self)
         self._build()
 
     def _build(self):
         tk.Label(self, text="Comportamento da Rota", font=("Segoe UI", 20, "bold"),
                  bg=BG, fg="#2d3436").pack(pady=(15, 5))
-        _botao(self, "Plotar Gráfico", "#0984e3", self.plotar).pack(pady=6)
         self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=15, pady=(5, 15))
+        self.plotar()
 
     def plotar(self):
         rota_id = self.app.rota_atual_id
+        ax = self.figure.add_subplot(111)
+        ax.clear()
         if not rota_id:
-            messagebox.showwarning("Aviso", "Selecione uma rota na aba 'Rotas'.")
+            ax.text(0.5, 0.5, "Importe uma rota para visualizar o gráfico.",
+                    ha="center", va="center", fontsize=12, color="#636e72")
+            self.figure.tight_layout()
+            self.canvas.draw()
             return
         try:
             resp = self.app.api.grafico_rota(rota_id)
-        except requests.exceptions.RequestException as e:
-            messagebox.showerror("Erro", f"Erro de comunicação com a API:\n{e}")
+        except requests.exceptions.RequestException:
+            self.canvas.draw()
             return
         if resp.status_code != 200:
-            messagebox.showerror("Erro", extract_error(resp))
+            ax.text(0.5, 0.5, extract_error(resp), ha="center", va="center",
+                    fontsize=12, color="#d63031")
+            self.figure.tight_layout()
+            self.canvas.draw()
             return
 
         dados = resp.json()
@@ -246,8 +214,6 @@ class GraficoTab(tk.Frame):
             for p in pontos if p["risco"] and p["forca_g"] is not None
         ]
 
-        ax = self.figure.add_subplot(111)
-        ax.clear()
         ax.plot(tempos, fgs, color="#0984e3", linewidth=1.0, label="Força G resultante")
         if riscos:
             rt, rf = zip(*riscos)
