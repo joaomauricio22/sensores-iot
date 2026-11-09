@@ -43,6 +43,11 @@ class ImportadorService:
         """
         if not nome or not str(nome).strip():
             raise ValidationError("O nome da rota é obrigatório.")
+        nome = str(nome).strip()
+        if len(nome) > 100:
+            raise ValidationError("O nome da rota deve ter no máximo 100 caracteres.")
+        if arquivo_origem is not None and len(arquivo_origem) > 200:
+            raise ValidationError("O arquivo de origem deve ter no máximo 200 caracteres.")
 
         registros = self.__parse(conteudo_csv)
         if not registros:

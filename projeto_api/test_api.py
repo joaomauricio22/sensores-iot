@@ -62,6 +62,9 @@ def main():
         r = requests.post(f"{BASE}/rotas", json={"nome": ""})
         show("POST rota sem nome (400)", r.status_code == 400, f"{r.status_code}")
 
+        r = requests.post(f"{BASE}/rotas", json={"nome": "n" * 120})
+        show("POST rota nome longo (400)", r.status_code == 400, f"{r.status_code}")
+
         r = requests.post(f"{BASE}/rotas", json={
             "nome": f"Rota teste {SUFIXO}",
             "arquivo_origem": "teste.csv",
@@ -141,6 +144,12 @@ def main():
             "leitura_id": 999999, "metodo": "LIMITE",
         })
         show("POST evento leitura inexistente (400)", r.status_code == 400, f"{r.status_code}")
+
+        r = requests.post(f"{BASE}/eventos-risco", json={
+            "leitura_id": leitura_id, "metodo": "LIMITE", "canal": "velocidade",
+            "classificacao": "x" * 50,
+        })
+        show("POST evento classificação longa (400)", r.status_code == 400, f"{r.status_code}")
 
         r = requests.post(f"{BASE}/eventos-risco", json={
             "leitura_id": leitura_id, "metodo": "LIMITE", "canal": "velocidade",

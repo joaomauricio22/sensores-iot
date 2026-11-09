@@ -32,6 +32,8 @@ class EventoRiscoService:
         leitura = self.__validar_leitura(leitura_id, rota_id, data_hora)
         metodo = self.__validar_metodo(metodo)
         canal = self.__validar_canal(canal)
+        classificacao = self.__validar_classificacao(classificacao)
+        descricao = self.__validar_descricao(descricao)
 
         evento = EventoRisco(
             leitura_id=leitura.id,
@@ -42,7 +44,7 @@ class EventoRiscoService:
             valor=valor,
             forca_g=forca_g,
             instabilidade=instabilidade,
-            classificacao=classificacao or "Comportamento atípico",
+            classificacao=classificacao,
             descricao=descricao,
         )
         return self.__repository.add(evento)
@@ -58,6 +60,8 @@ class EventoRiscoService:
         leitura = self.__validar_leitura(leitura_id, rota_id, data_hora)
         metodo = self.__validar_metodo(metodo)
         canal = self.__validar_canal(canal)
+        classificacao = self.__validar_classificacao(classificacao)
+        descricao = self.__validar_descricao(descricao)
 
         evento.leitura_id = leitura.id
         evento.rota_id = leitura.rota_id
@@ -67,7 +71,7 @@ class EventoRiscoService:
         evento.valor = valor
         evento.forca_g = forca_g
         evento.instabilidade = instabilidade
-        evento.classificacao = classificacao or "Comportamento atípico"
+        evento.classificacao = classificacao
         evento.descricao = descricao
         return self.__repository.update(evento)
 
@@ -112,3 +116,19 @@ class EventoRiscoService:
                 "ou um dos canais especiais: geral, forca_g, multivariado."
             )
         return canal
+
+    def __validar_classificacao(self, classificacao):
+        classificacao = str(classificacao).strip() if classificacao else ""
+        if not classificacao:
+            return "Comportamento atípico"
+        if len(classificacao) > 40:
+            raise ValidationError("A classificação deve ter no máximo 40 caracteres.")
+        return classificacao
+
+    def __validar_descricao(self, descricao):
+        if descricao is None:
+            return None
+        descricao = str(descricao).strip()
+        if len(descricao) > 255:
+            raise ValidationError("A descrição deve ter no máximo 255 caracteres.")
+        return descricao

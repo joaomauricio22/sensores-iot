@@ -21,11 +21,15 @@ class LeituraRepository:
         )
 
     def get_historico(self, rota_id, limite=5000):
-        """Leituras de outras rotas (histórico para o modelo de ML)."""
+        """Leituras de outras rotas (histórico para o modelo de ML).
+
+        Ordenadas em ordem cronológica para que as features dependentes do tempo
+        (aceleração longitudinal) tenham o mesmo sentido das leituras da rota.
+        """
         return (
             db.session.query(Leitura)
             .filter(Leitura.rota_id != rota_id)
-            .order_by(Leitura.data_hora.desc())
+            .order_by(Leitura.data_hora)
             .limit(limite)
             .all()
         )

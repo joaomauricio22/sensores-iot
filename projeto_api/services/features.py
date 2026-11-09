@@ -20,6 +20,9 @@ def distancia_haversine(lat1, lon1, lat2, lon2) -> float:
     dphi = math.radians(lat2 - lat1)
     dlmb = math.radians(lon2 - lon1)
     a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlmb / 2) ** 2
+    # Protege o domínio do asin contra erros de arredondamento (a pode ficar
+    # ligeiramente acima de 1 para pontos antípodas, causando ValueError).
+    a = min(1.0, max(0.0, a))
     return 2 * raio_terra * math.asin(math.sqrt(a))
 
 

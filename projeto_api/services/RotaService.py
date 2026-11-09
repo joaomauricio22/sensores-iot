@@ -19,7 +19,9 @@ class RotaService:
     def add(self, nome: str, arquivo_origem: str = None) -> Rota:
         if not nome or not str(nome).strip():
             raise ValidationError("O nome da rota é obrigatório.")
-        rota = Rota(nome=str(nome).strip(), arquivo_origem=arquivo_origem)
+        nome = str(nome).strip()
+        self.__validar_tamanhos(nome, arquivo_origem)
+        rota = Rota(nome=nome, arquivo_origem=arquivo_origem)
         return self.__repository.add(rota)
 
     def update(self, rota_id: int, nome: str, arquivo_origem: str = None):
@@ -28,10 +30,18 @@ class RotaService:
             return None
         if not nome or not str(nome).strip():
             raise ValidationError("O nome da rota é obrigatório.")
-        rota.nome = str(nome).strip()
+        nome = str(nome).strip()
+        self.__validar_tamanhos(nome, arquivo_origem)
+        rota.nome = nome
         if arquivo_origem is not None:
             rota.arquivo_origem = arquivo_origem
         return self.__repository.update(rota)
+
+    def __validar_tamanhos(self, nome, arquivo_origem):
+        if len(nome) > 100:
+            raise ValidationError("O nome da rota deve ter no máximo 100 caracteres.")
+        if arquivo_origem is not None and len(arquivo_origem) > 200:
+            raise ValidationError("O arquivo de origem deve ter no máximo 200 caracteres.")
 
     def delete(self, rota_id: int):
         rota = self.__repository.get_by_id(rota_id)
