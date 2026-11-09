@@ -45,9 +45,9 @@ class App:
         self.secao_atual = None
 
         self.root.title("Telemetria Veicular — Detecção de Eventos de Risco")
-        self.root.geometry("1280x800")
         self.root.minsize(1080, 680)
         self.root.configure(bg=BG)
+        self.__centralizar(1280, 800)
 
         # Fila usada para entregar, na thread principal, os resultados das
         # tarefas executadas em segundo plano (análise/consultas).
@@ -57,6 +57,18 @@ class App:
         self._construir()
         self.recarregar_rotas()
         self.mostrar("dados")
+
+    def __centralizar(self, largura, altura):
+        """Posiciona a janela no centro da tela, mantendo o tamanho inicial.
+
+        Sem ``+X+Y`` no geometry, o gerenciador de janelas abre a aplicação no
+        canto superior esquerdo. Aqui calculamos o deslocamento a partir da
+        resolução da tela para centralizá-la.
+        """
+        self.root.update_idletasks()  # garante dimensões reais da tela
+        pos_x = max(0, (self.root.winfo_screenwidth() - largura) // 2)
+        pos_y = max(0, (self.root.winfo_screenheight() - altura) // 2)
+        self.root.geometry(f"{largura}x{altura}+{pos_x}+{pos_y}")
 
     # ------------------------------------------------------------------ #
     # Construção da interface
