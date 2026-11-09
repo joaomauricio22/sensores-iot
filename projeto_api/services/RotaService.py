@@ -33,8 +33,7 @@ class RotaService:
         nome = str(nome).strip()
         self.__validar_tamanhos(nome, arquivo_origem)
         rota.nome = nome
-        if arquivo_origem is not None:
-            rota.arquivo_origem = arquivo_origem
+        rota.arquivo_origem = arquivo_origem or None
         return self.__repository.update(rota)
 
     def __validar_tamanhos(self, nome, arquivo_origem):

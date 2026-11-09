@@ -20,13 +20,6 @@ class EventoRiscoRepository:
             query = query.filter(EventoRisco.classificacao == tipo)
         return query.all()
 
-    def get_by_leitura_metodo(self, leitura_id, metodo):
-        return (
-            db.session.query(EventoRisco)
-            .filter(EventoRisco.leitura_id == leitura_id, EventoRisco.metodo == metodo)
-            .first()
-        )
-
     def add(self, evento: EventoRisco) -> EventoRisco:
         db.session.add(evento)
         db.session.commit()

@@ -648,17 +648,22 @@ class EventoRiscoTab(tk.Frame):
         if tipo == "Todos":
             tipo = None
 
+        filtro = self._rota_filtro()
         try:
-            resp = self.app.api.list_eventos(self._rota_filtro(), tipo)
-            resp_leituras = self.app.api.list_leituras()
+            resp = self.app.api.list_eventos(filtro, tipo)
             resp_sensores = self.app.api.get_sensores()
+            # Carrega as leituras apenas da rota filtrada (evita trazer todas).
+            resp_leituras = self.app.api.list_leituras(filtro) if filtro is not None else None
         except requests.exceptions.RequestException:
             return
         if resp.status_code != 200:
             return
         self.eventos = resp.json()
-        if resp_leituras.status_code == 200:
-            self.leituras = resp_leituras.json()
+        self.leituras = (
+            resp_leituras.json()
+            if resp_leituras is not None and resp_leituras.status_code == 200
+            else []
+        )
         if resp_sensores.status_code == 200:
             self.sensores = list(resp_sensores.json().keys())
 
@@ -704,7 +709,10 @@ class EventoRiscoTab(tk.Frame):
 
     def novo(self):
         if not self.leituras:
-            messagebox.showwarning("Aviso", "Cadastre uma leitura antes de criar eventos.")
+            messagebox.showwarning(
+                "Aviso",
+                "Selecione uma rota no filtro acima para escolher a leitura do evento.",
+            )
             return
         dialogo = FormDialog(self, "Novo evento de risco", self._campos())
         if dialogo.resultado is None:
@@ -723,6 +731,12 @@ class EventoRiscoTab(tk.Frame):
     def editar(self):
         evento_id = self._get_selecionada()
         if evento_id is None:
+            return
+        if not self.leituras:
+            messagebox.showwarning(
+                "Aviso",
+                "Selecione uma rota no filtro acima para editar o evento.",
+            )
             return
         evento = next((e for e in self.eventos if e["id"] == evento_id), None)
         if evento is None:
@@ -849,17 +863,28 @@ class DashboardTab(tk.Frame):
         self.resumo = None
         self.eventos = []
         if not rota_id:
-            self.var_score.set("—")
-            self.lbl_score.configure(fg=TEXTO)
-            for var in self.vars.values():
-                var.set("—")
-            self._limpar_tipos("Selecione uma rota na barra superior.")
+            self._mostrar_vazio("Selecione uma rota na barra superior.")
             return
-        try:
-            self.app.api.analisar_rota(rota_id)
+
+        self.var_score.set("…")
+        self.lbl_score.configure(fg=TEXTO)
+        self._limpar_tipos("Analisando a rota…")
+
+        def carregar():
+            # resumo_rota dispara a análise no servidor (idempotente).
             resp = self.app.api.resumo_rota(rota_id)
-        except requests.exceptions.RequestException:
+            resp_eventos = self.app.api.list_eventos(rota_id)
+            return rota_id, resp, resp_eventos
+
+        self.app.carregar_async(carregar, self._render)
+
+    def _render(self, resultado):
+        if isinstance(resultado, dict) and "__erro__" in resultado:
+            self._limpar_tipos(resultado["__erro__"])
             return
+        rota_id, resp, resp_eventos = resultado
+        if rota_id != self.app.rota_atual_id:
+            return  # a rota mudou enquanto carregava
         if resp.status_code != 200:
             self._limpar_tipos(extract_error(resp))
             return
@@ -878,12 +903,15 @@ class DashboardTab(tk.Frame):
         self.vars["total"].set(str(resumo.get("total_eventos", 0)))
         self._exibir_tipos(resumo.get("eventos_por_tipo", {}))
 
-        try:
-            resp_eventos = self.app.api.list_eventos(rota_id)
-            if resp_eventos.status_code == 200:
-                self.eventos = resp_eventos.json()
-        except requests.exceptions.RequestException:
-            pass
+        if resp_eventos.status_code == 200:
+            self.eventos = resp_eventos.json()
+
+    def _mostrar_vazio(self, mensagem):
+        self.var_score.set("—")
+        self.lbl_score.configure(fg=TEXTO)
+        for var in self.vars.values():
+            var.set("—")
+        self._limpar_tipos(mensagem)
 
     def _limpar_tipos(self, mensagem):
         for widget in self.tipos_frame.winfo_children():
@@ -995,30 +1023,38 @@ class GraficoTab(tk.Frame):
         self._tooltip = None
 
         if not rota_id:
-            self.ax_vel.text(0.5, 0.5, "Selecione uma rota para visualizar o gráfico.",
-                             ha="center", va="center", fontsize=12, color=CINZA,
-                             transform=self.ax_vel.transAxes)
-            self.ax_vel.set_xticks([])
-            self.ax_vel.set_yticks([])
-            self.ax_fg.set_visible(False)
-            self.ax_rpm.set_visible(False)
-            self.canvas.draw()
+            self._mostrar_mensagem("Selecione uma rota para visualizar o gráfico.", CINZA)
+            return
+
+        self._mostrar_mensagem("Analisando a rota…", CINZA)
+
+        def carregar():
+            self.app.api.analisar_rota(rota_id)
+            resp = self.app.api.grafico_rota(rota_id)
+            return rota_id, resp
+
+        self.app.carregar_async(carregar, self._render)
+
+    def _mostrar_mensagem(self, texto, cor):
+        self.ax_fg.set_visible(False)
+        self.ax_rpm.set_visible(False)
+        self.ax_vel.text(0.5, 0.5, texto, ha="center", va="center", fontsize=12,
+                         color=cor, transform=self.ax_vel.transAxes)
+        self.ax_vel.set_xticks([])
+        self.ax_vel.set_yticks([])
+        self.canvas.draw()
+
+    def _render(self, resultado):
+        if isinstance(resultado, dict) and "__erro__" in resultado:
+            self._mostrar_mensagem(resultado["__erro__"], "#d63031")
+            return
+        rota_id, resp = resultado
+        if rota_id != self.app.rota_atual_id:
             return
         self.ax_fg.set_visible(True)
         self.ax_rpm.set_visible(True)
-
-        try:
-            self.app.api.analisar_rota(rota_id)
-            resp = self.app.api.grafico_rota(rota_id)
-        except requests.exceptions.RequestException:
-            self.canvas.draw()
-            return
         if resp.status_code != 200:
-            self.ax_vel.text(0.5, 0.5, extract_error(resp), ha="center", va="center",
-                             fontsize=12, color="#d63031", transform=self.ax_vel.transAxes)
-            self.ax_vel.set_xticks([])
-            self.ax_vel.set_yticks([])
-            self.canvas.draw()
+            self._mostrar_mensagem(extract_error(resp), "#d63031")
             return
 
         dados = resp.json()
@@ -1148,12 +1184,24 @@ class MapaTab(tk.Frame):
         if not rota_id:
             self.msg.configure(text="Selecione uma rota com GPS para visualizar o trajeto.")
             return
-        try:
+        self.msg.configure(text="Analisando a rota…")
+
+        def carregar():
             self.app.api.analisar_rota(rota_id)
             resp = self.app.api.grafico_rota(rota_id)
-        except requests.exceptions.RequestException:
+            return rota_id, resp
+
+        self.app.carregar_async(carregar, self._render)
+
+    def _render(self, resultado):
+        if isinstance(resultado, dict) and "__erro__" in resultado:
+            self.msg.configure(text=resultado["__erro__"])
+            return
+        rota_id, resp = resultado
+        if rota_id != self.app.rota_atual_id:
             return
         if resp.status_code != 200:
+            self.msg.configure(text=extract_error(resp))
             return
         pontos = resp.json()["pontos"]
         coordenadas = [(p["latitude"], p["longitude"]) for p in pontos

@@ -6,6 +6,8 @@ Navegação lateral:
 
 Executar: python main.py
 """
+import queue
+import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -46,6 +48,11 @@ class App:
         self.root.geometry("1280x800")
         self.root.minsize(1080, 680)
         self.root.configure(bg=BG)
+
+        # Fila usada para entregar, na thread principal, os resultados das
+        # tarefas executadas em segundo plano (análise/consultas).
+        self._fila = queue.Queue()
+        self._agendar_consumidor()
 
         self._construir()
         self.recarregar_rotas()
@@ -192,6 +199,38 @@ class App:
         self.secoes["visao"].atualizar()
         self.secoes["grafico"].plotar()
         self.secoes["mapa"].atualizar()
+
+    def carregar_async(self, funcao, ao_concluir):
+        """Executa `funcao()` em uma thread e entrega o resultado na thread principal.
+
+        Evita que a análise (ML) e as consultas pesadas congelem a interface.
+        O resultado chega por uma fila, consumida pelo `_agendar_consumidor`
+        (agendado na thread principal via `after`), que chama `ao_concluir`.
+        """
+        def trabalho():
+            try:
+                resultado = funcao()
+            except requests.exceptions.RequestException as erro:
+                resultado = {"__erro__": str(erro)}
+            self._fila.put((ao_concluir, resultado))
+
+        threading.Thread(target=trabalho, daemon=True).start()
+
+    def _agendar_consumidor(self):
+        """Drena a fila periodicamente na thread principal."""
+        self._drenar_fila()
+        self.root.after(100, self._agendar_consumidor)
+
+    def _drenar_fila(self):
+        while True:
+            try:
+                callback, resultado = self._fila.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                callback(resultado)
+            except Exception as erro:  # noqa: BLE001 — mantém o loop vivo
+                print("Erro ao atualizar a interface:", erro)
 
 
 def main():

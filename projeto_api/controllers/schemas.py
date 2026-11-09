@@ -17,11 +17,6 @@ class RotaRequestSchema(Schema):
     arquivo_origem = fields.Str(allow_none=True)
 
 
-class RotaUpdateSchema(Schema):
-    nome = fields.Str(required=True)
-    arquivo_origem = fields.Str(allow_none=True)
-
-
 class ImportarRequestSchema(Schema):
     nome = fields.Str(required=True)
     arquivo_origem = fields.Str(allow_none=True)

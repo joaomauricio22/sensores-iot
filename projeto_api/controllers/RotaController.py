@@ -9,7 +9,6 @@ from controllers.schemas import (
     ImportarRequestSchema,
     RotaRequestSchema,
     RotaResponseSchema,
-    RotaUpdateSchema,
 )
 from services.AnaliseService import AnaliseService
 from services.ImportadorService import ImportadorService
@@ -54,7 +53,7 @@ class RotaItem(MethodResource, Resource):
         except OperationalError:
             abort(500, message="Erro interno do servidor.")
 
-    @use_kwargs(RotaUpdateSchema, location="json")
+    @use_kwargs(RotaRequestSchema, location="json")
     @marshal_with(RotaResponseSchema)
     def put(self, rota_id, **kwargs):
         try:
