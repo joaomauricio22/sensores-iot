@@ -855,6 +855,7 @@ class DashboardTab(tk.Frame):
 
         rodape = tk.Frame(self, bg=BG)
         rodape.pack(fill="x", padx=20, pady=(5, 15))
+        _botao(rodape, "Reanalisar", "#0984e3", self.reanalisar, width=16).pack(side="left", padx=(0, 8))
         _botao(rodape, "Exportar Relatório (CSV)", "#00b894",
                self.exportar_relatorio, width=24).pack(side="left")
 
@@ -872,6 +873,24 @@ class DashboardTab(tk.Frame):
 
         def carregar():
             # resumo_rota dispara a análise no servidor (idempotente).
+            resp = self.app.api.resumo_rota(rota_id)
+            resp_eventos = self.app.api.list_eventos(rota_id)
+            return rota_id, resp, resp_eventos
+
+        self.app.carregar_async(carregar, self._render)
+
+    def reanalisar(self):
+        """Força a reanálise da rota atual (apaga e reexecuta os detectores)."""
+        rota_id = self.app.rota_atual_id
+        if not rota_id:
+            return
+        self.var_score.set("…")
+        self.lbl_score.configure(fg=TEXTO)
+        self._limpar_tipos("Reanalisando a rota…")
+
+        def carregar():
+            # POST /analisar agora força a reanálise no servidor.
+            self.app.api.analisar_rota(rota_id)
             resp = self.app.api.resumo_rota(rota_id)
             resp_eventos = self.app.api.list_eventos(rota_id)
             return rota_id, resp, resp_eventos
@@ -1029,7 +1048,7 @@ class GraficoTab(tk.Frame):
         self._mostrar_mensagem("Analisando a rota…", CINZA)
 
         def carregar():
-            self.app.api.analisar_rota(rota_id)
+            # grafico_rota já dispara a análise (idempotente) no servidor.
             resp = self.app.api.grafico_rota(rota_id)
             return rota_id, resp
 
@@ -1187,7 +1206,7 @@ class MapaTab(tk.Frame):
         self.msg.configure(text="Analisando a rota…")
 
         def carregar():
-            self.app.api.analisar_rota(rota_id)
+            # grafico_rota já dispara a análise (idempotente) no servidor.
             resp = self.app.api.grafico_rota(rota_id)
             return rota_id, resp
 

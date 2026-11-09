@@ -66,7 +66,9 @@ class LeituraService:
             raise ValidationError("Já existe uma leitura para esta rota nesse instante.")
 
         leitura = Leitura(rota_id=rota_id, data_hora=data_hora, **valores)
-        return self.__repository.add(leitura)
+        resultado = self.__repository.add(leitura)
+        self.__invalidar_analise(rota_id)
+        return resultado
 
     def update(self, leitura_id: int, rota_id: int, data_hora, velocidade=None,
                rpm=None, accel_x=None, accel_y=None, accel_z=None,
@@ -74,6 +76,7 @@ class LeituraService:
         leitura = self.__repository.get_by_id(leitura_id)
         if not leitura:
             return None
+        rota_anterior = leitura.rota_id
         if self.__rota_repository.get_by_id(rota_id) is None:
             raise ValidationError("Não é possível registrar leitura para uma rota não cadastrada.")
 
@@ -97,13 +100,20 @@ class LeituraService:
         leitura.data_hora = data_hora
         for campo, valor in valores.items():
             setattr(leitura, campo, valor)
-        return self.__repository.update(leitura)
+        resultado = self.__repository.update(leitura)
+        self.__invalidar_analise(rota_id)
+        if rota_anterior != rota_id:
+            self.__invalidar_analise(rota_anterior)
+        return resultado
 
     def delete(self, leitura_id: int):
         leitura = self.__repository.get_by_id(leitura_id)
         if not leitura:
             return None
-        return self.__repository.delete(leitura)
+        rota_id = leitura.rota_id
+        resultado = self.__repository.delete(leitura)
+        self.__invalidar_analise(rota_id)
+        return resultado
 
     def __exigir_algum_valor(self, valores):
         if not any(valores[campo] is not None for campo in CAMPOS_VALOR):
@@ -121,3 +131,14 @@ class LeituraService:
         if not math.isfinite(valor):
             raise ValidationError(f"O valor de {nome} deve ser um número finito.")
         return valor
+
+    def __invalidar_analise(self, rota_id):
+        """Marca a rota como não analisada após mudança nas leituras.
+
+        Assim, a próxima consulta a resumo/gráfico reexecuta a análise e
+        incorpora a leitura nova/editada/excluída.
+        """
+        rota = self.__rota_repository.get_by_id(rota_id)
+        if rota is not None:
+            rota.data_analise = None
+            self.__rota_repository.update(rota)

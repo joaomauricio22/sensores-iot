@@ -204,6 +204,21 @@ def main():
             r = requests.post(f"{BASE}/rotas/comparar", json={})
             show("POST comparar sem rota_ids (400)", r.status_code == 400, f"{r.status_code}")
 
+        # Regressão: uma leitura criada APÓS a análise deve ser reanalisada.
+        if rota_csv_id:
+            r = requests.get(f"{BASE}/rotas/{rota_csv_id}/resumo")
+            total_antes = r.json().get("total_eventos", 0)
+            r = requests.post(f"{BASE}/leituras", json={
+                "rota_id": rota_csv_id, "data_hora": "2026-01-21T08:00:11",
+                "velocidade": 135, "rpm": 6000,
+            })
+            show("POST leitura pós-análise (201)", r.status_code == 201, f"{r.status_code}")
+            if r.status_code == 201:
+                r = requests.get(f"{BASE}/rotas/{rota_csv_id}/resumo")
+                total_depois = r.json().get("total_eventos", 0)
+                show("Reanálise detecta a leitura nova",
+                     total_depois > total_antes, f"{total_antes} -> {total_depois}")
+
         # ---------------------------------------------------------------- #
         # Exclusões e cascade
         # ---------------------------------------------------------------- #

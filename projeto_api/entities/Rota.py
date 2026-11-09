@@ -19,6 +19,9 @@ class Rota(db.Model):
     nome = Column("nome", String(100), nullable=False)
     arquivo_origem = Column("arquivo_origem", String(200))
     data_importacao = Column("data_importacao", DateTime, nullable=False, default=datetime.now)
+    # Instante da última análise de risco. None = rota ainda não analisada
+    # (ou invalidada após edição/criação/exclusão de leituras).
+    data_analise = Column("data_analise", DateTime)
 
     leituras = relationship(
         "Leitura",

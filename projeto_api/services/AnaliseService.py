@@ -1,4 +1,5 @@
 import statistics
+from datetime import datetime
 
 from entities.Base import db
 from entities.EventoRisco import EventoRisco
@@ -40,15 +41,34 @@ class AnaliseService:
         self.__limiares_service = LimiaresService()
         self.__detectores = [LimiteDetector(), EstatisticoDetector(), ModeloMLDetector()]
 
-    def analisar_rota(self, rota_id: int):
-        """Executa os detectores e classifica os eventos de risco (idempotente)."""
+    def analisar_rota(self, rota_id: int, forcar: bool = False):
+        """Executa os detectores e classifica os eventos de risco (idempotente).
+
+        - ``forcar=False`` (análise automática): se a rota já foi analisada e as
+          leituras não mudaram, não refaz. Se a análise está pendente (rota nova
+          ou invalidada após edição de leituras), executa os detectores e
+          **acrescenta** os eventos novos, preservando os já existentes (evita
+          apagar eventos cadastrados manualmente via CRUD). Usado por
+          ``resumo_rota``/``grafico_rota``.
+        - ``forcar=True``: apaga os eventos existentes e reexecuta a análise do
+          zero (limpa e determinística). Usado pelo endpoint
+          ``POST /rotas/<id>/analisar``, pelo botão "Reanalisar" e pelo
+          ``reanalisar.py``.
+        """
         rota = self.__rota_repository.get_by_id(rota_id)
         if not rota:
             return None
 
-        # Se a rota já foi analisada, não refaz (evita reprocessar o ML).
-        if self.__evento_repository.get_by_rota(rota_id):
+        # Rota já analisada e leituras inalteradas: não refaz o trabalho.
+        if not forcar and rota.data_analise is not None:
             return []
+
+        # Reanálise explícita (forçar): descarta os eventos anteriores da rota
+        # antes de reexecutar os detectores (análise limpa e determinística).
+        # Na análise automática, os eventos existentes são preservados e apenas
+        # os novos são acrescentados (evita apagar eventos cadastrados via CRUD).
+        if forcar:
+            db.session.query(EventoRisco).filter(EventoRisco.rota_id == rota_id).delete()
 
         leituras = self.__leitura_repository.get_by_rota(rota_id)
         historico = self.__leitura_repository.get_historico(rota_id)
@@ -60,16 +80,21 @@ class AnaliseService:
             for evento in detector.detectar(leituras, rota, limiares, historico=historico):
                 detectados.append((detector.get_metodo(), evento))
 
-        existentes = set()
+        # Eventos já persistidos (para não duplicar na análise automática).
+        existentes = {
+            (e.leitura_id, e.metodo, e.classificacao, e.canal)
+            for e in self.__evento_repository.get_by_rota(rota_id)
+        }
+        vistos = set()
         novos = []
         for metodo, evento in detectados:
             leitura = evento["leitura"]
             classificacao = evento.get("classificacao") or "Comportamento atípico"
             canal = evento.get("canal") or "geral"
             chave = (leitura.id, metodo, classificacao, canal)
-            if chave in existentes:
+            if chave in existentes or chave in vistos:
                 continue
-            existentes.add(chave)
+            vistos.add(chave)
             novos.append(EventoRisco(
                 leitura_id=leitura.id,
                 rota_id=rota_id,
@@ -84,6 +109,7 @@ class AnaliseService:
             ))
 
         db.session.add_all(novos)
+        rota.data_analise = datetime.now()
         db.session.commit()
         return novos
 
@@ -92,6 +118,9 @@ class AnaliseService:
         rota = self.__rota_repository.get_by_id(rota_id)
         if not rota:
             return None
+
+        # Garante que a análise foi executada (idempotente).
+        self.analisar_rota(rota_id)
 
         leituras = self.__leitura_repository.get_by_rota(rota_id)
         eventos = self.__evento_repository.get_by_rota(rota_id)
@@ -172,11 +201,7 @@ class AnaliseService:
 
     def reanalisar_rota(self, rota_id: int):
         """Remove os eventos existentes e reexecuta a análise (novos limiares)."""
-        if self.__rota_repository.get_by_id(rota_id) is None:
-            return None
-        db.session.query(EventoRisco).filter(EventoRisco.rota_id == rota_id).delete()
-        db.session.commit()
-        return self.analisar_rota(rota_id)
+        return self.analisar_rota(rota_id, forcar=True)
 
     def reanalisar_todas(self) -> int:
         """Reanalisa todas as rotas; retorna a quantidade de rotas reprocessadas."""

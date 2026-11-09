@@ -10,6 +10,7 @@ class RotaResponseSchema(Schema):
     nome = fields.Str()
     arquivo_origem = fields.Str(allow_none=True)
     data_importacao = fields.DateTime()
+    data_analise = fields.DateTime(allow_none=True)
 
 
 class RotaRequestSchema(Schema):

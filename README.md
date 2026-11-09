@@ -70,26 +70,57 @@ rota 1 ── N leitura 1 ── N evento_risco
 ## Regras de negócio (10)
 
 > Neste domínio, cada **sensor** corresponde a um canal de medição do veículo
-> (velocidade, RPM, aceleração X/Y/Z, ...), e cada **leitura** é um frame de telemetria.
+> (velocidade, RPM, aceleração X/Y/Z, ...), e cada **leitura** é um frame de telemetria
+> com os valores desses sensores em um mesmo instante.
 
-1. **Identificação do sensor:** cada sensor possui um identificador único no sistema
-   (`config/limiares.json` → seção `sensores` → ids `S01`...`S08`).
-2. **Dados obrigatórios da leitura:** uma leitura só é registrada se possuir rota,
-   data/hora e ao menos um valor medido (`LeituraService.add`).
-3. **Sensor cadastrado:** não se registra leitura/evento para um canal que não esteja no
-   catálogo (`LimiaresService` + `EventoRiscoService.__validar_canal`).
-4. **Valores válidos:** o sistema rejeita valores não numéricos/não finitos
-   (`fields.Float` + `__validar_numero`).
-5. **Leituras duplicadas:** `UniqueConstraint(rota_id, data_hora)` + deduplicação no importador.
-6. **Limites de operação:** cada sensor tem `min`/`max` de referência no JSON
-   (`sensores`) e limiares de risco na seção `limiares`.
-7. **Identificação de anomalias:** leitura fora dos limites (`LimiteDetector`) ou com
-   desvio significativo do histórico (`EstatisticoDetector`, `ModeloMLDetector`).
-8. **Classificação pelo modelo:** o modelo de ML classifica cada leitura como normal ou
-   anômala; somente as anômalas são persistidas (`ModeloMLDetector`).
-9. **Registro das anomalias:** `evento_risco` guarda canal, valor, data/hora e método.
-10. **Análise histórica:** o modelo de ML treina com as leituras das **outras rotas** e o
-    detector estatístico usa o desvio padrão do histórico (z-score).
+As 10 regras (texto original, conforme enviadas na Parte 1):
+
+1. **Identificação do sensor:** cada sensor deve possuir um identificador único no sistema.
+2. **Dados obrigatórios da leitura:** uma leitura só poderá ser registrada se possuir
+   sensor, valor medido e data/hora da coleta.
+3. **Sensor cadastrado:** o sistema não deve permitir o registro de uma leitura associada
+   a um sensor que não esteja cadastrado.
+4. **Valores válidos:** o sistema não deve armazenar leituras com valores que não sejam
+   numéricos ou incompatíveis com o tipo de dado produzido pelo sensor.
+5. **Leituras duplicadas:** o sistema não deve considerar como nova leitura duas medições
+   do mesmo sensor com o mesmo valor e o mesmo instante de coleta.
+6. **Limites de operação:** cada sensor deve possuir limites mínimo e máximo de referência
+   para suas medições, de acordo com seu tipo.
+7. **Identificação de anomalias:** uma leitura que ultrapasse os limites de referência ou
+   apresente comportamento significativamente diferente do padrão histórico deve ser
+   identificada como potencialmente anômala.
+8. **Classificação pelo modelo:** as leituras submetidas ao modelo de Machine Learning
+   devem receber uma classificação indicando comportamento normal ou potencialmente anômalo.
+9. **Registro das anomalias:** toda anomalia identificada deve manter informações sobre o
+   sensor, valor, data/hora e método utilizado para sua identificação.
+10. **Análise histórica:** o sistema deve utilizar dados históricos dos sensores para
+    calcular padrões estatísticos e fornecer informações utilizadas na identificação de
+    comportamentos anormais.
+
+### Onde cada regra está implementada
+
+| Regra | Implementação |
+|---|---|
+| 1 | `config/limiares.json` → `sensores.*.id` (`S01`...`S08`) |
+| 2 | `LeituraService.add` (exige rota + data/hora + ao menos um valor medido, sendo os valores os sensores/canais) |
+| 3 | `LimiaresService.get_sensores` + `EventoRiscoService.__validar_canal` (validação por nome) |
+| 4 | `fields.Float` (Marshmallow) + `LeituraService.__validar_numero` |
+| 5 | `UniqueConstraint(rota_id, data_hora)` + deduplicação no importador |
+| 6 | `config/limiares.json` → `sensores.*.min/max` e `limiares.*` |
+| 7 | `LimiteDetector` + `EstatisticoDetector` + `ModeloMLDetector` |
+| 8 | `ModeloMLDetector` (DBSCAN + RandomForest) — classifica normal × anômalo; só as anômalas são persistidas |
+| 9 | `EventoRisco` (canal, valor, data/hora, método) |
+| 10 | `ModeloMLDetector` (histórico das outras rotas) + `EstatisticoDetector` (z-score) |
+
+> **Notas de interpretação:**
+> - **Regra 3:** a leitura é um frame com colunas fixas, e cada coluna corresponde a um
+>   sensor do catálogo — um canal não cadastrado não possui coluna e, portanto, não pode
+>   ser persistido na leitura. A validação **por nome** acontece nos eventos
+>   (`EventoRiscoService.__validar_canal`), que referenciam canais livremente.
+> - **Regra 8:** o modelo classifica **todas** as leituras como normal ou anômala
+>   internamente; por eficiência e pela regra 9, apenas as anômalas são persistidas.
+> - **Regra 6:** os limites `min`/`max` são de **referência** (não rejeitam leituras);
+>   a detecção de risco usa os limiares da seção `limiares`.
 
 ## Detecção de risco (3 métodos, 6 classificações)
 
@@ -115,6 +146,23 @@ rota 1 ── N leitura 1 ── N evento_risco
 A Força G resultante é `√(ax² + ay²)`; a instabilidade é o desvio padrão da aceleração
 numa janela de ~3 s. O **score de segurança** (0–100) desconta pontos conforme a
 severidade dos eventos detectados.
+
+> **Limitação do score:** a penalidade é contada por evento (não normalizada por
+> distância/duração). Rotas muito longas tendem a acumular mais eventos e, portanto, a
+> score menor que rotas curtas. A comparação entre rotas deve considerar isso.
+
+### Análise idempotente e reanálise
+
+Cada rota guarda o instante da última análise (`rota.data_analise`). A análise é
+executada automaticamente quando a rota é criada (importação) e **reagendada** sempre que
+uma leitura é criada, editada ou excluída (o campo é invalidado por
+`LeituraService.__invalidar_analise`).
+
+- **Análise automática** (`resumo`/`gráfico`): acrescenta apenas os eventos novos,
+  preservando os já existentes — inclusive os cadastrados manualmente via CRUD.
+- **Reanálise forçada** (`POST /rotas/<id>/analisar`, botão "Reanalisar" ou
+  `python reanalisar.py`): apaga os eventos e os regenera do zero — útil após editar
+  `config/limiares.json` ou corrigir uma leitura.
 
 ### Limpeza na importação
 
@@ -166,7 +214,7 @@ python test_limpeza.py    # testes unitários da limpeza
 | GET / POST | `/telemetria/rotas` | Listar / cadastrar rotas |
 | POST | `/telemetria/rotas/importar` | Importar CSV como rota |
 | GET / PUT / DELETE | `/telemetria/rotas/<id>` | Selecionar / editar / excluir |
-| POST | `/telemetria/rotas/<id>/analisar` | Detecção de eventos de risco |
+| POST | `/telemetria/rotas/<id>/analisar` | (Re)executa a detecção de eventos de risco |
 | GET | `/telemetria/rotas/<id>/grafico` | Dados para o gráfico (e mapa) |
 | GET | `/telemetria/rotas/<id>/resumo` | Dashboard (score + estatísticas) |
 | POST | `/telemetria/rotas/comparar` | Comparar resumos de rotas |

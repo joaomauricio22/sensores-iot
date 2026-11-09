@@ -11,7 +11,10 @@ CREATE TABLE IF NOT EXISTS rota (
     id_rota          SERIAL PRIMARY KEY,
     nome             VARCHAR(100) NOT NULL,
     arquivo_origem   VARCHAR(200),
-    data_importacao  TIMESTAMP NOT NULL DEFAULT NOW()
+    data_importacao  TIMESTAMP NOT NULL DEFAULT NOW(),
+    -- Marca o instante da última análise (eventos de risco). NULL = ainda não
+    -- analisada. Permite pular a reanálise e detectar leituras novas/editadas.
+    data_analise     TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS leitura (

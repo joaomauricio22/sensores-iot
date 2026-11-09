@@ -102,7 +102,7 @@ class RotaImportar(MethodResource, Resource):
 
 
 class RotaAnalisar(MethodResource, Resource):
-    """Executa a detecção de eventos de risco sobre a rota."""
+    """(Re)executa a detecção de eventos de risco sobre a rota."""
 
     def __init__(self):
         self.__analise = AnaliseService()
@@ -110,7 +110,8 @@ class RotaAnalisar(MethodResource, Resource):
     @marshal_with(EventoRiscoResponseSchema(many=True))
     def post(self, rota_id):
         try:
-            eventos = self.__analise.analisar_rota(rota_id)
+            # Chamada explícita: força a reanálise (apaga e reexecuta).
+            eventos = self.__analise.analisar_rota(rota_id, forcar=True)
             if eventos is None:
                 abort(404, message="Rota não encontrada.")
             return eventos, 200
