@@ -261,7 +261,6 @@ class RotaTab(tk.Frame):
         botoes = tk.Frame(self, bg=BG)
         botoes.pack(anchor="w", padx=20, pady=6)
         _botao(botoes, "Nova Rota", "#0984e3", self.nova).pack(side="left", padx=(0, 5))
-        _botao(botoes, "Importar CSV", "#6c5ce7", self.importar).pack(side="left", padx=5)
         _botao(botoes, "Editar", "#e17055", self.editar).pack(side="left", padx=5)
         _botao(botoes, "Excluir", "#d63031", self.excluir).pack(side="left", padx=5)
         _botao(botoes, "Atualizar", CINZA, self.atualizar, width=12).pack(side="left", padx=5)
@@ -324,29 +323,14 @@ class RotaTab(tk.Frame):
         self.lbl_status.configure(text=f"{len(self.rotas)} rota(s)")
 
     def nova(self):
-        dialogo = FormDialog(self, "Nova rota", [
-            {"chave": "nome", "rotulo": "Nome da rota", "tipo": "texto", "obrigatorio": True},
-            {"chave": "arquivo_origem", "rotulo": "Arquivo de origem", "tipo": "texto"},
-        ])
-        if dialogo.resultado is None:
-            return
-        try:
-            resp = self.app.api.criar_rota(**dialogo.resultado)
-        except requests.exceptions.RequestException as erro:
-            _erro_conexao(erro)
-            return
-        if resp.status_code in (200, 201):
-            self.app.recarregar_rotas(selecionar=resp.json().get("id"))
-        else:
-            _erro_api(resp)
-
-    def importar(self):
+        # "Nova rota" = importar um CSV de telemetria. A rota é criada junto
+        # com as suas leituras (cadastro em lote), conforme o fluxo do sistema.
         caminho = filedialog.askopenfilename(
             title="Selecionar arquivo de telemetria", filetypes=[("CSV", "*.csv")],
         )
         if not caminho:
             return
-        dialogo = FormDialog(self, "Importar CSV", [
+        dialogo = FormDialog(self, "Nova rota", [
             {"chave": "nome", "rotulo": "Nome da rota", "tipo": "texto", "obrigatorio": True},
         ], valores={"nome": os.path.splitext(os.path.basename(caminho))[0]})
         if dialogo.resultado is None:
@@ -368,7 +352,7 @@ class RotaTab(tk.Frame):
             dados = resp.json()
             limpeza = dados.get("limpeza", {})
             messagebox.showinfo(
-                "Importação concluída",
+                "Rota criada",
                 f"{dados.get('total_leituras', 0)} leituras importadas.\n"
                 f"Leituras descartadas: {limpeza.get('total_removido', 0)}\n"
                 f"Spikes ajustados: {limpeza.get('acelerometro_ajustado', 0)}",
