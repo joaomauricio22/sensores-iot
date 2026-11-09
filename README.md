@@ -13,6 +13,8 @@ velocidade, RPM excessivo e acelerador brusco), com **score de segurança** do c
 
 ```
 Trabalho_PAV/
+├── README.md               # Este documento
+├── GUIA-DE-USO.md          # Guia de uso passo a passo (demonstração)
 ├── projeto_api/            # Modelos, API, análise e Docker
 │   ├── entities/           # Classes de modelo (SQLAlchemy)
 │   ├── repositories/       # Operações no banco de dados
@@ -42,9 +44,12 @@ Trabalho_PAV/
 │   ├── main.py             # Janela principal com navegação lateral
 │   ├── tabs.py             # Seções: Dados (Rotas/Leituras/Eventos), Visão Geral, Gráfico, Sensores, Comparar
 │   ├── api_client.py       # Cliente HTTP
-│   └── capturar_telas.py   # Gera as capturas para os slides
+│   └── capturar_telas.py   # Captura as telas (exige API no ar) → apresentacao/imgs/
 │
 └── apresentacao/           # Apresentação (slides)
+    ├── gerar_slides.py     # Gera o arquivo slides_pav.pptx
+    ├── roteiro-apresentacao.md
+    ├── imgs/               # Capturas de tela usadas nos slides
     └── slides_pav.pptx
 ```
 
@@ -175,6 +180,8 @@ A rota **não é dividida** por intervalos de tempo: é a viagem inteira.
 
 ## Como executar
 
+> No Windows, abra o **Docker Desktop** antes e rode os comandos no **CMD** (ou PowerShell).
+
 ```bash
 cd projeto_api
 docker compose up --build -d    # sobe API (8080) + banco (5432)
@@ -183,10 +190,11 @@ docker compose up --build -d    # sobe API (8080) + banco (5432)
 A API fica em `http://localhost:8080/telemetria`. O banco **inicia vazio**: a primeira
 rota cadastrada recebe o **id 1**.
 
-Interface gráfica (roda fora do container):
+Interface gráfica (roda fora do container; instale as dependências uma vez):
 
 ```bash
 cd projeto_interface
+pip install requests matplotlib pillow
 python main.py
 ```
 
@@ -234,3 +242,9 @@ python test_limpeza.py    # testes unitários da limpeza
 - **Encapsulamento:** atributos privados (`self.__repository`, `self.__service`).
 - **Programação estruturada:** condições (validações), repetições (janelas/laços),
   listas e dicionários (padronização e payloads).
+
+## Documentação
+
+- **[Guia de uso](GUIA-DE-USO.md)** — passo a passo da demonstração (subir, cadastrar rota, CRUD, análise).
+- **[Roteiro da apresentação](apresentacao/roteiro-apresentacao.md)** — mapeamento dos 10 itens exigidos.
+- **Slides** — gere com `cd apresentacao && python gerar_slides.py` (saída `slides_pav.pptx`).
