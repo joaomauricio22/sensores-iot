@@ -254,6 +254,9 @@ class RotaTab(tk.Frame):
 
     def _build(self):
         _titulo(self, "Rotas", "Cada rota representa uma viagem monitorada.")
+        self.lbl_status = tk.Label(self, text="", bg=BG, fg=CINZA,
+                                   font=("Segoe UI", 9))
+        self.lbl_status.pack(anchor="w", padx=20)
 
         botoes = tk.Frame(self, bg=BG)
         botoes.pack(anchor="w", padx=20, pady=6)
@@ -295,11 +298,20 @@ class RotaTab(tk.Frame):
         return int(self.tree.item(selecao[0])["values"][0])
 
     def atualizar(self):
-        try:
-            resp = self.app.api.list_rotas()
-        except requests.exceptions.RequestException:
+        self.lbl_status.configure(text="Carregando…")
+
+        def carregar():
+            return self.app.api.list_rotas()
+
+        self.app.carregar_async(carregar, self._render)
+
+    def _render(self, resultado):
+        if isinstance(resultado, dict) and "__erro__" in resultado:
+            self.lbl_status.configure(text="Erro ao carregar as rotas.")
             return
+        resp = resultado
         if resp.status_code != 200:
+            self.lbl_status.configure(text="Erro ao carregar as rotas.")
             return
         self.rotas = resp.json()
         for item in self.tree.get_children():
@@ -309,6 +321,7 @@ class RotaTab(tk.Frame):
                 rota["id"], rota["nome"], rota.get("arquivo_origem") or "",
                 _para_exibicao(rota.get("data_importacao")),
             ))
+        self.lbl_status.configure(text=f"{len(self.rotas)} rota(s)")
 
     def nova(self):
         dialogo = FormDialog(self, "Nova rota", [
@@ -432,6 +445,9 @@ class LeituraTab(tk.Frame):
 
     def _build(self):
         _titulo(self, "Leituras", "Frames de telemetria: valores dos sensores em um instante.")
+        self.lbl_status = tk.Label(self, text="", bg=BG, fg=CINZA,
+                                   font=("Segoe UI", 9))
+        self.lbl_status.pack(anchor="w", padx=20)
 
         filtro = tk.Frame(self, bg=BG)
         filtro.pack(anchor="w", padx=20, pady=4)
@@ -476,12 +492,22 @@ class LeituraTab(tk.Frame):
         self.combo_rota["values"] = nomes
         if self.combo_rota.current() < 0:
             self.combo_rota.current(0)
+        self.lbl_status.configure(text="Carregando…")
 
-        try:
-            resp = self.app.api.list_leituras(self._rota_filtro())
-        except requests.exceptions.RequestException:
+        filtro = self._rota_filtro()
+
+        def carregar():
+            return self.app.api.list_leituras(filtro)
+
+        self.app.carregar_async(carregar, self._render)
+
+    def _render(self, resultado):
+        if isinstance(resultado, dict) and "__erro__" in resultado:
+            self.lbl_status.configure(text="Erro ao carregar as leituras.")
             return
+        resp = resultado
         if resp.status_code != 200:
+            self.lbl_status.configure(text="Erro ao carregar as leituras.")
             return
         self.leituras = resp.json()
         for item in self.tree.get_children():
@@ -495,6 +521,7 @@ class LeituraTab(tk.Frame):
                 _fmt_num(leitura.get("accel_z"), 2), _fmt_num(leitura.get("posicao_acelerador")),
                 _fmt_num(leitura.get("latitude"), 6), _fmt_num(leitura.get("longitude"), 6),
             ))
+        self.lbl_status.configure(text=f"{len(self.leituras)} leitura(s)")
 
     def _get_selecionada(self):
         selecao = self.tree.selection()
@@ -592,6 +619,9 @@ class EventoRiscoTab(tk.Frame):
     def _build(self):
         _titulo(self, "Eventos de Risco",
                 "Anomalias detectadas: canal, valor, método e classificação.")
+        self.lbl_status = tk.Label(self, text="", bg=BG, fg=CINZA,
+                                   font=("Segoe UI", 9))
+        self.lbl_status.pack(anchor="w", padx=20)
 
         filtro = tk.Frame(self, bg=BG)
         filtro.pack(anchor="w", padx=20, pady=4)
@@ -647,16 +677,25 @@ class EventoRiscoTab(tk.Frame):
         tipo = self.combo_tipo.get()
         if tipo == "Todos":
             tipo = None
-
         filtro = self._rota_filtro()
-        try:
+        self.lbl_status.configure(text="Carregando…")
+
+        def carregar():
             resp = self.app.api.list_eventos(filtro, tipo)
             resp_sensores = self.app.api.get_sensores()
             # Carrega as leituras apenas da rota filtrada (evita trazer todas).
             resp_leituras = self.app.api.list_leituras(filtro) if filtro is not None else None
-        except requests.exceptions.RequestException:
+            return resp, resp_sensores, resp_leituras
+
+        self.app.carregar_async(carregar, self._render)
+
+    def _render(self, resultado):
+        if isinstance(resultado, dict) and "__erro__" in resultado:
+            self.lbl_status.configure(text="Erro ao carregar os eventos.")
             return
+        resp, resp_sensores, resp_leituras = resultado
         if resp.status_code != 200:
+            self.lbl_status.configure(text="Erro ao carregar os eventos.")
             return
         self.eventos = resp.json()
         self.leituras = (
@@ -678,6 +717,7 @@ class EventoRiscoTab(tk.Frame):
                 _fmt_num(evento.get("forca_g"), 2),
                 _fmt_num(evento.get("instabilidade"), 2),
             ))
+        self.lbl_status.configure(text=f"{len(self.eventos)} evento(s)")
 
     def _get_selecionada(self):
         selecao = self.tree.selection()
