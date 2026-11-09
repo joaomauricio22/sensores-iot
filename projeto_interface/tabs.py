@@ -4,7 +4,7 @@ Organização:
   - Dados: Rotas, Leituras e Eventos de Risco, com CRUD completo.
   - Visão Geral: resumo + score de segurança da rota + exportação CSV.
   - Gráfico: velocidade, Força G e RPM, com limiares do JSON e tooltip.
-  - Mapa: trajeto GPS com os trechos de risco.
+  - Análise por Sensor: estatísticas e % de leituras fora do limiar.
   - Comparar: compara o resumo de duas rotas.
 """
 import csv
@@ -1049,15 +1049,6 @@ class GraficoTab(tk.Frame):
         self.canvas.mpl_connect("motion_notify_event", self._on_hover)
         self.plotar()
 
-    def _limiares(self):
-        try:
-            resp = self.app.api.get_limiares()
-            if resp.status_code == 200:
-                return resp.json()
-        except requests.exceptions.RequestException:
-            pass
-        return {}
-
     def plotar(self):
         rota_id = self.app.rota_atual_id
         for eixo in (self.ax_vel, self.ax_fg, self.ax_rpm):
@@ -1074,7 +1065,9 @@ class GraficoTab(tk.Frame):
         def carregar():
             # grafico_rota já dispara a análise (idempotente) no servidor.
             resp = self.app.api.grafico_rota(rota_id)
-            return rota_id, resp
+            # Busca os limiares em background para não travar a thread principal.
+            resp_limiares = self.app.api.get_limiares()
+            return rota_id, resp, resp_limiares
 
         self.app.carregar_async(carregar, self._render)
 
@@ -1091,9 +1084,13 @@ class GraficoTab(tk.Frame):
         if isinstance(resultado, dict) and "__erro__" in resultado:
             self._mostrar_mensagem(resultado["__erro__"], "#d63031")
             return
-        rota_id, resp = resultado
+        rota_id, resp, resp_limiares = resultado
         if rota_id != self.app.rota_atual_id:
             return
+        # Limpa os eixos para remover a mensagem "Analisando a rota…" (que
+        # ficaria como marca d'água atrás das linhas).
+        for eixo in (self.ax_vel, self.ax_fg, self.ax_rpm):
+            eixo.clear()
         self.ax_fg.set_visible(True)
         self.ax_rpm.set_visible(True)
         if resp.status_code != 200:
@@ -1107,7 +1104,7 @@ class GraficoTab(tk.Frame):
         velocidades = [p["velocidade"] if p["velocidade"] is not None else 0.0 for p in pontos]
         forcas = [p["forca_g"] if p["forca_g"] is not None else 0.0 for p in pontos]
         rpms = [p["rpm"] if p["rpm"] is not None else 0.0 for p in pontos]
-        limiares = self._limiares()
+        limiares = resp_limiares.json() if resp_limiares.status_code == 200 else {}
 
         # Painel 1 — velocidade + pontos de risco coloridos.
         self.ax_vel.plot(tempos, velocidades, color="#0984e3", linewidth=1.3,
@@ -1157,6 +1154,7 @@ class GraficoTab(tk.Frame):
             "", xy=(0, 0), xytext=(10, 10), textcoords="offset points",
             bbox=dict(boxstyle="round,pad=0.4", fc="white", ec=BORDA),
             fontsize=8, arrowprops=dict(arrowstyle="->", color=CINZA),
+            zorder=20, annotation_clip=False,
         )
         self._tooltip.set_visible(False)
 
@@ -1187,91 +1185,183 @@ class GraficoTab(tk.Frame):
 
 
 # =========================================================================
-# Mapa
+# Análise por Sensor
 # =========================================================================
-class MapaTab(tk.Frame):
+class SensorTab(tk.Frame):
 
     def __init__(self, master, app):
         super().__init__(master, bg=BG)
         self.app = app
-        self.mapa = None
+        self.figure = Figure(figsize=(7.0, 3.4), dpi=100, facecolor=BG)
+        self.ax = self.figure.add_subplot(111)
+        self.canvas = FigureCanvasTkAgg(self.figure, master=self)
         self._build()
 
     def _build(self):
-        _titulo(self, "Trajeto no Mapa", "Pontos de GPS e trechos com eventos de risco.")
-        self.msg = tk.Label(self, text="Carregando...", bg=BG, fg=CINZA,
-                            font=("Segoe UI", 10))
-        self.msg.pack(pady=4)
+        _titulo(self, "Análise por Sensor",
+                "Estatísticas dos sensores e % de leituras fora do limiar configurado.")
+        self.lbl_status = tk.Label(self, text="", bg=BG, fg=CINZA,
+                                   font=("Segoe UI", 9))
+        self.lbl_status.pack(anchor="w", padx=20)
 
-        self.container = tk.Frame(self, bg=BG)
-        self.container.pack(fill="both", expand=True, padx=15, pady=(5, 15))
+        tabela = tk.Frame(self, bg=BG)
+        tabela.pack(fill="both", expand=False, padx=20, pady=(5, 4))
+        cols = ("sensor", "min", "max", "media", "limiar", "fora_n", "fora_pct")
+        self.tree = ttk.Treeview(tabela, columns=cols, show="headings", height=4)
+        for chave, rotulo, largura, ancora in [
+            ("sensor", "Sensor", 210, "w"),
+            ("min", "Mín", 90, "center"),
+            ("max", "Máx", 90, "center"),
+            ("media", "Média", 90, "center"),
+            ("limiar", "Limiar", 130, "center"),
+            ("fora_n", "Fora (n)", 90, "center"),
+            ("fora_pct", "Fora (%)", 90, "center"),
+        ]:
+            self.tree.heading(chave, text=rotulo)
+            self.tree.column(chave, width=largura, anchor=ancora)
+        self.tree.pack(fill="both", expand=True)
 
-        try:
-            from tkintermapview import TkinterMapView
-            self.mapa = TkinterMapView(self.container, width=800, height=520, corner_radius=0)
-            self.mapa.pack(fill="both", expand=True)
-            self.mapa.set_position(-22.58, -43.28)
-            self.mapa.set_zoom(14)
-            self.msg.configure(text="Mapa do OpenStreetMap — requer conexão com a internet.")
-        except ImportError:
-            self.mapa = None
-            self.msg.configure(text="Biblioteca 'tkintermapview' não instalada. "
-                                    "Instale com: pip install tkintermapview")
+        self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=20, pady=(0, 15))
 
     def atualizar(self):
-        if self.mapa is None:
-            return
         rota_id = self.app.rota_atual_id
-        self.mapa.delete_all_path()
-        self.mapa.delete_all_marker()
         if not rota_id:
-            self.msg.configure(text="Selecione uma rota com GPS para visualizar o trajeto.")
+            self.lbl_status.configure(text="Selecione uma rota para ver a análise por sensor.")
+            self._limpar()
             return
-        self.msg.configure(text="Analisando a rota…")
+        self.lbl_status.configure(text="Carregando…")
 
         def carregar():
             # grafico_rota já dispara a análise (idempotente) no servidor.
             resp = self.app.api.grafico_rota(rota_id)
-            return rota_id, resp
+            resp_limiares = self.app.api.get_limiares()
+            return rota_id, resp, resp_limiares
 
         self.app.carregar_async(carregar, self._render)
 
+    def _limpar(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        self.ax.clear()
+        self.ax.set_xticks([])
+        self.ax.set_yticks([])
+        self.canvas.draw()
+
     def _render(self, resultado):
         if isinstance(resultado, dict) and "__erro__" in resultado:
-            self.msg.configure(text=resultado["__erro__"])
+            self.lbl_status.configure(text="Erro ao carregar a análise por sensor.")
+            self._limpar()
             return
-        rota_id, resp = resultado
+        rota_id, resp, resp_limiares = resultado
         if rota_id != self.app.rota_atual_id:
             return
         if resp.status_code != 200:
-            self.msg.configure(text=extract_error(resp))
-            return
-        pontos = resp.json()["pontos"]
-        coordenadas = [(p["latitude"], p["longitude"]) for p in pontos
-                       if p.get("latitude") is not None and p.get("longitude") is not None]
-        if not coordenadas:
-            self.msg.configure(text="Esta rota não possui dados de GPS (latitude/longitude).")
+            self.lbl_status.configure(text=extract_error(resp))
+            self._limpar()
             return
 
-        self.mapa.set_position(coordenadas[0][0], coordenadas[0][1])
-        if len(coordenadas) >= 2:
-            self.mapa.set_path(coordenadas, color="#0984e3", width=4)
+        dados = resp.json()
+        pontos = dados["pontos"]
+        limiares = resp_limiares.json() if resp_limiares.status_code == 200 else {}
+        limiares = limiares.get("limiares", limiares)  # compatibilidade
 
-        n_risco = 0
-        for ponto in pontos:
-            if ponto["risco"] and ponto.get("latitude") is not None and ponto.get("longitude") is not None:
-                tipo = tipo_principal(ponto["classificacoes"])
-                cor = CORES_TIPO.get(tipo, "#d63031")
-                self.mapa.set_marker(
-                    ponto["latitude"], ponto["longitude"],
-                    text=tipo or "Risco",
-                    marker_color_circle=cor, marker_color_outside=cor,
-                    text_color="white",
-                )
-                n_risco += 1
-        self.msg.configure(
-            text=f"{len(coordenadas)} pontos de GPS · {n_risco} trecho(s) de risco."
-        )
+        if not pontos:
+            self.lbl_status.configure(text="Esta rota não possui leituras.")
+            self._limpar()
+            return
+
+        metricas = self._calcular(pontos, limiares)
+
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        for m in metricas:
+            self.tree.insert("", "end", values=(
+                m["rotulo"], _fmt_num(m["min"], m["casas"]),
+                _fmt_num(m["max"], m["casas"]), _fmt_num(m["media"], m["casas"]),
+                m["limiar_texto"], m["fora_n"], f"{m['fora_pct']:.1f}%",
+            ))
+
+        self._desenhar_barras(metricas)
+        self.lbl_status.configure(text=f"{len(pontos)} leitura(s) analisadas.")
+
+    def _calcular(self, pontos, limiares):
+        def serie(campo):
+            return [p[campo] for p in pontos]
+
+        def stats(valores):
+            valores = [v for v in valores if v is not None]
+            if not valores:
+                return {"min": None, "max": None, "media": None}
+            return {
+                "min": min(valores),
+                "max": max(valores),
+                "media": sum(valores) / len(valores),
+            }
+
+        def fora(valores, lo=None, hi=None):
+            n = 0
+            for v in valores:
+                if v is None:
+                    continue
+                if (lo is not None and v < lo) or (hi is not None and v > hi):
+                    n += 1
+            return n
+
+        total = len(pontos)
+
+        def pct(n):
+            return (n / total * 100.0) if total else 0.0
+
+        v_max = limiares.get("velocidade_max")
+        g_max = limiares.get("lateral_max")
+        r_max = limiares.get("rpm_max")
+        a_max = limiares.get("aceleracao_max")
+        f_max = limiares.get("frenagem_max")
+
+        vel = serie("velocidade")
+        fg = serie("forca_g")
+        rpm = serie("rpm")
+        acel = serie("acel_longitudinal")
+
+        def rotulo_limiar(lo, hi, casas=1):
+            if lo is None and hi is None:
+                return "—"
+            if lo is not None and hi is not None:
+                return f"{_fmt_num(lo, casas)} / {_fmt_num(hi, casas)}"
+            return _fmt_num(hi if hi is not None else lo, casas)
+
+        return [
+            {"rotulo": "Velocidade (km/h)", "casas": 1,
+             **stats(vel), "limiar_texto": rotulo_limiar(None, v_max),
+             "fora_n": fora(vel, hi=v_max), "fora_pct": pct(fora(vel, hi=v_max))},
+            {"rotulo": "Força G (m/s²)", "casas": 2,
+             **stats(fg), "limiar_texto": rotulo_limiar(None, g_max),
+             "fora_n": fora(fg, hi=g_max), "fora_pct": pct(fora(fg, hi=g_max))},
+            {"rotulo": "RPM", "casas": 0,
+             **stats(rpm), "limiar_texto": rotulo_limiar(None, r_max, 0),
+             "fora_n": fora(rpm, hi=r_max), "fora_pct": pct(fora(rpm, hi=r_max))},
+            {"rotulo": "Aceleração long. (m/s²)", "casas": 2,
+             **stats(acel), "limiar_texto": rotulo_limiar(f_max, a_max, 1),
+             "fora_n": fora(acel, lo=f_max, hi=a_max),
+             "fora_pct": pct(fora(acel, lo=f_max, hi=a_max))},
+        ]
+
+    def _desenhar_barras(self, metricas):
+        self.ax.clear()
+        nomes = ["Velocidade", "Força G", "RPM", "Acel. long."]
+        valores = [m["fora_pct"] for m in metricas]
+        cores = ["#0984e3", "#e17055", "#6c5ce7", "#00b894"]
+        barras = self.ax.bar(nomes, valores, color=cores[:len(nomes)])
+        self.ax.set_ylabel("% de leituras fora do limiar")
+        topo = max(valores) * 1.15 if valores else 0
+        self.ax.set_ylim(0, max(topo, 10))
+        for barra, v in zip(barras, valores):
+            self.ax.text(barra.get_x() + barra.get_width() / 2,
+                         barra.get_height() + max(topo, 10) * 0.02,
+                         f"{v:.1f}%", ha="center", va="bottom", fontsize=9)
+        self.ax.grid(axis="y", linestyle="--", alpha=0.4)
+        self.figure.tight_layout()
+        self.canvas.draw()
 
 
 # =========================================================================

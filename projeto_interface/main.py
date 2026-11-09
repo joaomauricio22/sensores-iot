@@ -2,7 +2,7 @@
 
 A interface é separada da API: toda operação passa por HTTP (ApiClient).
 Navegação lateral:
-  Dados (Rotas / Leituras / Eventos) · Visão Geral · Gráfico · Mapa · Comparar
+  Dados (Rotas / Leituras / Eventos) · Visão Geral · Gráfico · Sensores · Comparar
 
 Executar: python main.py
 """
@@ -22,7 +22,7 @@ from tabs import (
     DadosTab,
     DashboardTab,
     GraficoTab,
-    MapaTab,
+    SensorTab,
     TEXTO,
     _rotulo_rota,
 )
@@ -87,7 +87,7 @@ class App:
             ("dados", "Dados"),
             ("visao", "Visão Geral"),
             ("grafico", "Gráfico"),
-            ("mapa", "Mapa"),
+            ("sensores", "Sensores"),
             ("comparar", "Comparar"),
         ]:
             botao = tk.Button(
@@ -125,7 +125,7 @@ class App:
             "dados": DadosTab(self.conteudo, self),
             "visao": DashboardTab(self.conteudo, self),
             "grafico": GraficoTab(self.conteudo, self),
-            "mapa": MapaTab(self.conteudo, self),
+            "sensores": SensorTab(self.conteudo, self),
             "comparar": CompararTab(self.conteudo, self),
         }
 
@@ -182,7 +182,7 @@ class App:
         # Atualiza as listas que dependem do cadastro de rotas.
         self.secoes["dados"].atualizar()
         self.secoes["comparar"].atualizar()
-        if self.secao_atual in ("visao", "grafico", "mapa"):
+        if self.secao_atual in ("visao", "grafico", "sensores"):
             self.secoes[self.secao_atual].atualizar()
 
     def definir_rota(self, rota_id):
@@ -203,14 +203,14 @@ class App:
         else:
             self.rota_atual_id = self.rotas[indice - 1]["id"]
         self.refresh_detalhes()
-        if self.secao_atual in ("visao", "grafico", "mapa"):
+        if self.secao_atual in ("visao", "grafico", "sensores"):
             self.secoes[self.secao_atual].atualizar()
 
     def refresh_detalhes(self):
         """Atualiza as seções que dependem da rota selecionada."""
         self.secoes["visao"].atualizar()
         self.secoes["grafico"].plotar()
-        self.secoes["mapa"].atualizar()
+        self.secoes["sensores"].atualizar()
 
     def carregar_async(self, funcao, ao_concluir):
         """Executa `funcao()` em uma thread e entrega o resultado na thread principal.

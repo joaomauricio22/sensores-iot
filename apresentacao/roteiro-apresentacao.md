@@ -9,8 +9,8 @@ Mapeamento dos 10 itens exigidos ao que foi implementado.
 5. **Arquitetura** — camadas: entities → repositories → services → controllers → routes.
 6. **Principais classes** — `DetectorAnomalia` + 3 detectores, `ImportadorService`, `AnaliseService`, `LimiaresService`.
 7. **Endpoints** — CRUD das 3 tabelas + `/rotas/<id>/analisar`, `/rotas/<id>/grafico`, `/rotas/<id>/resumo`, `/rotas/comparar`, `/limiares`, `/sensores`.
-8. **Interface gráfica** — Tkinter, navegação lateral (Dados, Visão Geral, Gráfico, Mapa, Comparar).
-9. **Demonstração** — importação real, CRUD, ≥3 regras, análise (classificações), score, mapa.
+8. **Interface gráfica** — Tkinter, navegação lateral (Dados, Visão Geral, Gráfico, Sensores, Comparar).
+9. **Demonstração** — importação real, CRUD, ≥3 regras, análise (classificações), score, análise por sensor.
 10. **Dificuldades** — padronização, performance, compatibilidade de versões, ML.
 
 > O roteiro detalhado de defesa está em `ROTEIRO-DEFESA.md` (na raiz do projeto).

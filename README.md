@@ -7,7 +7,7 @@ velocidade, RPM excessivo e acelerador brusco), com **score de segurança** do c
 
 - **Aluno:** João Maurício Araújo Leitão
 - **Modalidade:** Individual
-- **Tecnologias:** Python, Flask (Flask-RESTful), SQLAlchemy, PostgreSQL, scikit-learn, matplotlib, tkintermapview, Tkinter, Docker
+- **Tecnologias:** Python, Flask (Flask-RESTful), SQLAlchemy, PostgreSQL, scikit-learn, matplotlib, Tkinter, Docker
 
 ## Estrutura do projeto
 
@@ -40,7 +40,7 @@ Trabalho_PAV/
 │
 ├── projeto_interface/      # Interface gráfica Tkinter (separada da API)
 │   ├── main.py             # Janela principal com navegação lateral
-│   ├── tabs.py             # Seções: Dados (Rotas/Leituras/Eventos), Visão Geral, Gráfico, Mapa, Comparar
+│   ├── tabs.py             # Seções: Dados (Rotas/Leituras/Eventos), Visão Geral, Gráfico, Sensores, Comparar
 │   ├── api_client.py       # Cliente HTTP
 │   └── capturar_telas.py   # Gera as capturas para os slides
 │
@@ -183,17 +183,17 @@ docker compose up --build -d    # sobe API (8080) + banco (5432)
 A API fica em `http://localhost:8080/telemetria`. O banco **inicia vazio**: a primeira
 rota cadastrada recebe o **id 1**.
 
-Interface gráfica (roda fora do container; instale `tkintermapview` para o mapa):
+Interface gráfica (roda fora do container):
 
 ```bash
 cd projeto_interface
-pip install tkintermapview
 python main.py
 ```
 
-Na interface: **Dados → Rotas → Importar CSV** (ou criar manualmente) → o sistema
-**analisa automaticamente** e exibe **Visão Geral (score)**, **Gráfico**, **Mapa (GPS)**,
-permite **comparar rotas** e fazer o **CRUD completo** de rotas, leituras e eventos.
+Na interface: **Dados → Rotas → Nova Rota** (importa o CSV) → o sistema
+**analisa automaticamente** e exibe **Visão Geral (score)**, **Gráfico**,
+**Análise por Sensor**, permite **comparar rotas** e fazer o **CRUD completo**
+de rotas, leituras e eventos.
 
 ### Comandos auxiliares
 
@@ -215,7 +215,7 @@ python test_limpeza.py    # testes unitários da limpeza
 | POST | `/telemetria/rotas/importar` | Importar CSV como rota |
 | GET / PUT / DELETE | `/telemetria/rotas/<id>` | Selecionar / editar / excluir |
 | POST | `/telemetria/rotas/<id>/analisar` | (Re)executa a detecção de eventos de risco |
-| GET | `/telemetria/rotas/<id>/grafico` | Dados para o gráfico (e mapa) |
+| GET | `/telemetria/rotas/<id>/grafico` | Dados para o gráfico (e análise por sensor) |
 | GET | `/telemetria/rotas/<id>/resumo` | Dashboard (score + estatísticas) |
 | POST | `/telemetria/rotas/comparar` | Comparar resumos de rotas |
 | GET / POST | `/telemetria/leituras` | Listar (por rota) / cadastrar leituras |

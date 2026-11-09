@@ -31,7 +31,7 @@ PESOS_SCORE = {
 # Camada de serviço responsável pela ANÁLISE da telemetria.
 #   - Executa os detectores de risco (limite, estatístico e ML);
 #   - Classifica o tipo de cada evento (frenagem, aceleração, curva, etc.);
-#   - Fornece o resumo (dashboard + score) e os dados do gráfico/mapa.
+#   - Fornece o resumo (dashboard + score) e os dados do gráfico/análise por sensor.
 class AnaliseService:
 
     def __init__(self):
@@ -114,7 +114,7 @@ class AnaliseService:
         return novos
 
     def grafico_rota(self, rota_id: int):
-        """Retorna os dados do gráfico (velocidade, Força G, RPM) e do mapa (GPS)."""
+        """Retorna os dados do gráfico (velocidade, Força G, RPM) e de GPS."""
         rota = self.__rota_repository.get_by_id(rota_id)
         if not rota:
             return None

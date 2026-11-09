@@ -337,7 +337,7 @@ rows = [
     ("POST", "/telemetria/rotas/importar", "Importar CSV como rota"),
     ("GET / PUT / DELETE", "/telemetria/rotas/<id>", "Selecionar / editar / excluir"),
     ("POST", "/telemetria/rotas/<id>/analisar", "Detecção de eventos de risco"),
-    ("GET", "/telemetria/rotas/<id>/grafico", "Dados para o gráfico (e mapa)"),
+    ("GET", "/telemetria/rotas/<id>/grafico", "Dados para o gráfico (e análise por sensor)"),
     ("GET", "/telemetria/rotas/<id>/resumo", "Dashboard: score + estatísticas"),
     ("POST", "/telemetria/rotas/comparar", "Comparar resumos de rotas"),
     ("GET / POST", "/telemetria/leituras", "Listar / cadastrar leituras"),
@@ -383,7 +383,7 @@ passos = [
     ("1. Dados", "CRUD de rotas, leituras e eventos", BLUE),
     ("2. Cadastrar", "CSV vira uma rota nomeada", PURPLE),
     ("3. Análise", "Automática — sem botão", ORANGE),
-    ("4. Explorar", "Visão Geral, gráfico, mapa e comparação", RED),
+    ("4. Explorar", "Visão Geral, gráfico, sensores e comparação", RED),
 ]
 x = 0.6
 for titulo, desc, cor in passos:
@@ -393,7 +393,7 @@ for titulo, desc, cor in passos:
     _text(s, x + 0.15, 3.4, 2.6, 0.6, desc, size=11.5, color=TEXT_DIM, align=PP_ALIGN.CENTER)
     x += 3.08
 _text(s, 0.6, 4.35, 12.1, 0.6,
-      "Navegação lateral: Dados (Rotas · Leituras · Eventos) · Visão Geral · Gráfico · Mapa · Comparar.",
+      "Navegação lateral: Dados (Rotas · Leituras · Eventos) · Visão Geral · Gráfico · Sensores · Comparar.",
       size=14, color=TEXT, align=PP_ALIGN.CENTER)
 _card(s, 0.6, 5.2, 12.1, 1.5, "Sem expor IDs",
       "A seleção é feita por combobox/listas (o ID fica interno).\n"
@@ -419,9 +419,9 @@ _footer(s, 12)
 
 s = prs.slides.add_slide(BLANK)
 _navy_bg(s)
-_text(s, 0.6, 0.4, 12, 0.7, "Mapa e Gráfico", size=28, color=WHITE, bold=True)
+_text(s, 0.6, 0.4, 12, 0.7, "Sensores e Gráfico", size=28, color=WHITE, bold=True)
 _shape(s, MSO_SHAPE.RECTANGLE, 0.65, 1.15, 2.2, 0.06, fill=CYAN)
-_shot(s, os.path.join(IMGS, "mapa.png"), 0.55, 1.5, 5.9, "Mapa (GPS) com trechos de risco")
+_shot(s, os.path.join(IMGS, "sensores.png"), 0.55, 1.5, 5.9, "Análise por sensor (% fora do limiar)")
 _shot(s, os.path.join(IMGS, "grafico.png"), 6.9, 1.5, 5.9, "Gráfico em painel (velocidade, Força G, RPM)")
 _footer(s, 13)
 
@@ -432,7 +432,7 @@ demos = [
     ("CRUD completo", "Criar/ler/editar/excluir rotas, leituras e eventos.", PURPLE),
     ("Regras de negócio", "Ex.: leitura de rota inexistente, leitura duplicada.", TEAL),
     ("Análise + classificações", "6 tipos de evento detectados pelos 3 métodos.", ORANGE),
-    ("Dashboard, mapa e score", "Score 0–100, gráfico, mapa GPS e comparação.", RED),
+    ("Dashboard, sensores e score", "Score 0–100, gráfico, análise por sensor e comparação.", RED),
 ]
 y = 1.7
 for titulo, texto, cor in demos:

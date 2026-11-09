@@ -88,7 +88,7 @@ def main():
     for chave, nome, delay in [
         ("visao", "dashboard.png", 0.5),
         ("grafico", "grafico.png", 0.7),
-        ("mapa", "mapa.png", 2.5),
+        ("sensores", "sensores.png", 0.6),
         ("comparar", "comparar.png", 0.4),
     ]:
         app.mostrar(chave)

@@ -1,15 +1,15 @@
 # Guia de Uso — Telemetria Veicular (OBD-II)
 
 Este guia explica como usar o sistema como um produto real: cadastrar rotas de
-telemetria, gerenciar leituras e eventos, e explorar o dashboard, o gráfico, o mapa
-e a comparação.
+telemetria, gerenciar leituras e eventos, e explorar o dashboard, o gráfico, a
+análise por sensor e a comparação.
 
 ---
 
 ## Visão geral
 
 ```
-Cadastrar Rota (CSV) → Análise automática → Visão Geral / Eventos / Gráfico / Mapa
+Cadastrar Rota (CSV) → Análise automática → Visão Geral / Eventos / Gráfico / Sensores
 ```
 
 - **API** (`projeto_api`): recebe, padroniza, armazena e analisa os dados.
@@ -29,7 +29,6 @@ A API fica em `http://localhost:8080/telemetria`.
 
 ```bash
 cd projeto_interface
-pip install tkintermapview      # necessário para a seção Mapa
 python main.py
 ```
 
@@ -39,16 +38,14 @@ python main.py
 
 Na seção **Dados → Rotas**:
 
-1. Clique em **Importar CSV** e selecione o arquivo `.csv` de telemetria.
+1. Clique em **Nova Rota** e selecione o arquivo `.csv` de telemetria.
 2. Dê um nome para a rota (ex.: "Rota 1").
 3. O sistema importa as leituras, **padroniza os nomes das colunas** e **limpa** os dados
    (spikes de acelerômetro, velocidades implausíveis e excesso de leituras paradas).
 
 > Colunas não reconhecidas são ignoradas; frames duplicados são descartados.
 > A análise é feita **automaticamente** (não há botão "Analisar").
-
-Você também pode criar uma rota **manualmente** (botão **Nova Rota**), preenchendo apenas
-nome e arquivo de origem.
+> O botão **Nova Rota** faz o cadastro importando o CSV (o "cadastro" em lote).
 
 ---
 
@@ -58,7 +55,7 @@ Na seção **Dados**, as três tabelas do sistema têm operações de **criar, l
 
 | Sub-aba | O que permite |
 |---|---|
-| **Rotas** | criar (manual ou CSV), editar nome/origem e excluir |
+| **Rotas** | criar (via CSV), editar nome/origem e excluir |
 | **Leituras** | criar/editar um frame (rota, data/hora e valores dos sensores) e excluir |
 | **Eventos** | criar/editar/excluir um evento de risco (canal, valor, método, classificação) |
 
@@ -75,7 +72,7 @@ Ao selecionar uma rota na barra superior, cada seção se atualiza:
 | **Dados** | CRUD das tabelas rota, leitura e evento_risco |
 | **Visão Geral** | score de segurança (0–100), duração, distância, velocidades, RPM, eventos por tipo e **exportação CSV** |
 | **Gráfico** | painel com velocidade, Força G e RPM; linhas tracejadas = limiares do JSON; passe o mouse para ver os valores |
-| **Mapa** | trajeto GPS (OpenStreetMap) com os trechos de risco marcados |
+| **Sensores** | estatísticas (mín/máx/média) e % de leituras fora do limiar por sensor |
 | **Comparar** | compara o resumo (score e estatísticas) de duas rotas |
 
 > Na **Visão Geral**, use **Exportar Relatório (CSV)** para gerar um arquivo com as
