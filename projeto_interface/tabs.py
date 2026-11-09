@@ -144,7 +144,7 @@ class FormDialog(tk.Toplevel):
     """Janela modal com campos validados.
 
     Cada campo é um dict:
-      chave, rotulo, tipo ("texto", "numero", "combo", "datahora"),
+      chave, rotulo, tipo ("texto", "numero", "combo", "datahora", "arquivo"),
       obrigatorio (bool), valores (lista de (rótulo, valor) para combo).
     """
 
@@ -176,6 +176,7 @@ class FormDialog(tk.Toplevel):
                 row=linha, column=0, sticky="w", pady=5, padx=(0, 8))
 
             tipo = campo.get("tipo", "texto")
+            container = None
             if tipo == "combo":
                 widget = ttk.Combobox(form, state="readonly", width=38)
                 opcoes = campo.get("valores", [])
@@ -188,6 +189,20 @@ class FormDialog(tk.Toplevel):
                 else:
                     if opcoes and campo.get("obrigatorio"):
                         widget.current(0)
+            elif tipo == "arquivo":
+                # Campo com botão "Selecionar…" que abre o seletor de arquivo
+                # (mesma função do fluxo de importação de CSV). O valor salvo é
+                # apenas o nome do arquivo (arquivo_origem).
+                container = tk.Frame(form, bg=BG)
+                widget = tk.Entry(container, width=34, font=("Segoe UI", 10))
+                widget.pack(side="left", fill="x", expand=True)
+                atual = self.valores.get(chave)
+                if atual is not None:
+                    widget.insert(0, str(atual))
+                tk.Button(
+                    container, text="Selecionar…", font=("Segoe UI", 9),
+                    cursor="hand2", command=lambda w=widget: self._escolher_arquivo(w),
+                ).pack(side="left", padx=(6, 0))
             else:
                 widget = tk.Entry(form, width=40, font=("Segoe UI", 10))
                 atual = self.valores.get(chave)
@@ -195,8 +210,18 @@ class FormDialog(tk.Toplevel):
                     if tipo == "datahora":
                         atual = _para_exibicao(atual)
                     widget.insert(0, str(atual))
-            widget.grid(row=linha, column=1, sticky="ew", pady=5)
+            (container or widget).grid(row=linha, column=1, sticky="ew", pady=5)
             self.widgets[chave] = widget
+
+    def _escolher_arquivo(self, entrada):
+        """Abre o seletor e preenche a entrada com o nome do arquivo escolhido."""
+        caminho = filedialog.askopenfilename(
+            title="Selecionar arquivo de origem",
+            filetypes=[("CSV", "*.csv"), ("Todos os arquivos", "*.*")],
+        )
+        if caminho:
+            entrada.delete(0, "end")
+            entrada.insert(0, os.path.basename(caminho))
 
         botoes = tk.Frame(self, bg=BG)
         botoes.pack(pady=14)
@@ -370,7 +395,7 @@ class RotaTab(tk.Frame):
             return
         dialogo = FormDialog(self, "Editar rota", [
             {"chave": "nome", "rotulo": "Nome da rota", "tipo": "texto", "obrigatorio": True},
-            {"chave": "arquivo_origem", "rotulo": "Arquivo de origem", "tipo": "texto"},
+            {"chave": "arquivo_origem", "rotulo": "Arquivo de origem", "tipo": "arquivo"},
         ], valores=rota)
         if dialogo.resultado is None:
             return
