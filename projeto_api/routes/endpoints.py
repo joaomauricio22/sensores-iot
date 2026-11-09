@@ -1,10 +1,6 @@
-from controllers.ConfiguracaoController import (
-    ConfiguracaoItem,
-    ConfiguracaoLimiares,
-    ConfiguracaoList,
-)
 from controllers.EventoRiscoController import EventoRiscoItem, EventoRiscoList
 from controllers.LeituraController import LeituraItem, LeituraList
+from controllers.LimiaresController import Limiares, Sensores
 from controllers.RotaController import (
     RotaAnalisar,
     RotaComparar,
@@ -14,15 +10,10 @@ from controllers.RotaController import (
     RotaList,
     RotaResumo,
 )
-from controllers.UsuarioController import UsuarioItem, UsuarioList, UsuarioLogin
 
 
 # Registra as rotas (URLs) que a API sabe responder.
 def initialize_endpoints(api):
-    api.add_resource(UsuarioList, "/usuarios")
-    api.add_resource(UsuarioLogin, "/usuarios/login")
-    api.add_resource(UsuarioItem, "/usuarios/<int:usuario_id>")
-
     api.add_resource(RotaList, "/rotas")
     api.add_resource(RotaImportar, "/rotas/importar")
     api.add_resource(RotaComparar, "/rotas/comparar")
@@ -37,6 +28,6 @@ def initialize_endpoints(api):
     api.add_resource(EventoRiscoList, "/eventos-risco")
     api.add_resource(EventoRiscoItem, "/eventos-risco/<int:evento_id>")
 
-    api.add_resource(ConfiguracaoList, "/configuracoes")
-    api.add_resource(ConfiguracaoLimiares, "/configuracoes/limiares")
-    api.add_resource(ConfiguracaoItem, "/configuracoes/<int:config_id>")
+    # Configuração em JSON: somente leitura.
+    api.add_resource(Limiares, "/limiares")
+    api.add_resource(Sensores, "/sensores")

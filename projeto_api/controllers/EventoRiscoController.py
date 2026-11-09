@@ -32,7 +32,7 @@ class EventoRiscoList(MethodResource, Resource):
         except ValidationError as e:
             abort(400, message=str(e))
         except IntegrityError:
-            abort(409, message="Violação de integridade no banco de dados.")
+            abort(409, message="Já existe um evento igual para esta leitura.")
         except OperationalError:
             abort(500, message="Erro interno do servidor.")
 
@@ -62,6 +62,8 @@ class EventoRiscoItem(MethodResource, Resource):
             return evento, 200
         except ValidationError as e:
             abort(400, message=str(e))
+        except IntegrityError:
+            abort(409, message="Já existe um evento igual para esta leitura.")
         except OperationalError:
             abort(500, message="Erro interno do servidor.")
 

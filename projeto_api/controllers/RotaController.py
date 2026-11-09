@@ -9,6 +9,7 @@ from controllers.schemas import (
     ImportarRequestSchema,
     RotaRequestSchema,
     RotaResponseSchema,
+    RotaUpdateSchema,
 )
 from services.AnaliseService import AnaliseService
 from services.ImportadorService import ImportadorService
@@ -23,9 +24,6 @@ class RotaList(MethodResource, Resource):
     @marshal_with(RotaResponseSchema(many=True))
     def get(self):
         try:
-            usuario_id = request.args.get("usuario_id", type=int)
-            if usuario_id is not None:
-                return self.__service.get_by_usuario(usuario_id), 200
             return self.__service.get_all(), 200
         except OperationalError:
             abort(500, message="Erro interno do servidor.")
@@ -56,11 +54,15 @@ class RotaItem(MethodResource, Resource):
         except OperationalError:
             abort(500, message="Erro interno do servidor.")
 
-    @use_kwargs(RotaRequestSchema, location="json")
+    @use_kwargs(RotaUpdateSchema, location="json")
     @marshal_with(RotaResponseSchema)
     def put(self, rota_id, **kwargs):
         try:
-            rota = self.__service.update(rota_id, kwargs.get("nome"))
+            rota = self.__service.update(
+                rota_id,
+                nome=kwargs.get("nome"),
+                arquivo_origem=kwargs.get("arquivo_origem"),
+            )
             if not rota:
                 abort(404, message="Rota não encontrada.")
             return rota, 200
@@ -89,7 +91,6 @@ class RotaImportar(MethodResource, Resource):
     def post(self, **kwargs):
         try:
             resultado = self.__importador.importar_csv(
-                kwargs["usuario_id"],
                 kwargs["nome"],
                 kwargs.get("arquivo_origem"),
                 kwargs["conteudo_csv"],

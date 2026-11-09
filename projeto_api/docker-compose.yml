@@ -26,6 +26,9 @@ services:
       DATABASE_URI: postgresql://postgres:admin@db:5432/telemetria
     ports:
       - "8080:8080"
+    volumes:
+      # Limiares e catálogo de sensores: editáveis sem rebuild da imagem
+      - ./config/limiares.json:/app/config/limiares.json:ro
     depends_on:
       db:
         condition: service_healthy

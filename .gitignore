@@ -21,3 +21,6 @@ drive-download-*/
 
 # Dados de telemetria (CSVs locais — não publicar)
 projeto_api/dados/
+
+# Backups do banco de dados (gerados localmente)
+backups/

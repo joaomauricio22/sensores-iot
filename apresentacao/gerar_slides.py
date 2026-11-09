@@ -182,7 +182,7 @@ s = _content_slide(1, "Contexto do Sistema", accent=BLUE, page=2)
 _cards = [
     ("Receber", "Dados de telemetria coletados pela interface OBD-II do veículo.", BLUE),
     ("Padronizar", "Normaliza nomes de colunas de fontes diferentes para parâmetros canônicos.", PURPLE),
-    ("Armazenar", "Persistência em PostgreSQL (5 tabelas relacionadas).", TEAL),
+    ("Armazenar", "Persistência em PostgreSQL (3 tabelas relacionadas).", TEAL),
     ("Analisar", "Detecção de eventos de risco com DBSCAN e RandomForest.", ORANGE),
 ]
 y = 1.75
@@ -241,34 +241,26 @@ for i, (regra, cor) in enumerate(_regras):
 # ================================================================ 5. MODELO DE DADOS
 s = _content_slide(4, "Modelo do Banco de Dados", accent=TEAL, page=5)
 entidades = [
-    ("usuario", "nome (único)\nsenha (hash)", BLUE),
-    ("rota", "nome\narquivo de origem", PURPLE),
-    ("leitura", "velocidade, rpm\naccel_x/y/z\ndata_hora", TEAL),
-    ("evento_risco", "força_g\ninstabilidade\nclassificação\nmétodo", RED),
+    ("rota", "nome\narquivo de origem\ndata de importação", BLUE),
+    ("leitura", "velocidade, rpm\naccel_x/y/z\nacelerador, GPS", TEAL),
+    ("evento_risco", "canal, valor\nforça_g\nclassificação, método", RED),
 ]
-x = 0.7
+x = 1.0
 for nome, campos, cor in entidades:
-    box = _shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, x, 2.0, 2.6, 2.1, fill=CARD, radius=0.08)
-    _shape(s, MSO_SHAPE.RECTANGLE, x, 2.0, 2.6, 0.5, fill=cor)
-    _text(s, x, 2.06, 2.6, 0.4, nome, size=13, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
-    _text(s, x + 0.2, 2.62, 2.2, 1.45, campos, size=11.5, color=TEXT)
-    x += 2.6
+    box = _shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, x, 2.0, 3.0, 2.3, fill=CARD, radius=0.08)
+    _shape(s, MSO_SHAPE.RECTANGLE, x, 2.0, 3.0, 0.5, fill=cor)
+    _text(s, x, 2.06, 3.0, 0.4, nome, size=13, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
+    _text(s, x + 0.2, 2.66, 2.6, 1.6, campos, size=11.5, color=TEXT)
     if nome != "evento_risco":
-        _text(s, x - 0.02, 2.95, 0.45, 0.4, "1 ⟶ N", size=13, color=TEXT_DIM, bold=True,
+        _text(s, x + 3.0, 2.95, 0.7, 0.4, "1 ⟶ N", size=13, color=TEXT_DIM, bold=True,
               align=PP_ALIGN.CENTER)
-        x += 0.55
-# 5ª tabela — configuracao (chave/valor)
-box = _shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, 0.7, 4.5, 4.5, 0.85, fill=CARD, radius=0.12)
-_shape(s, MSO_SHAPE.RECTANGLE, 0.7, 4.5, 4.5, 0.42, fill=CYAN)
-_text(s, 0.7, 4.53, 4.5, 0.36, "configuracao", size=12, color=WHITE, bold=True,
-      align=PP_ALIGN.CENTER)
-_text(s, 0.95, 4.98, 4.1, 0.4, "chave / valor  (limiares ajustáveis)", size=11.5, color=TEXT)
-_text(s, 5.5, 4.65, 7.2, 0.7,
-      "5ª tabela: parâmetros do sistema (ex.: velocidade_max, rpm_max).",
-      size=13, color=TEXT_DIM)
-_card(s, 0.7, 5.6, 12, 1.15, "Padronização de parâmetros (back-end)",
-      "'Vehicle speed (km/h)' e 'Velocidade do veículo (km/h)' → mapeados para o parâmetro canônico 'velocidade'.",
+    x += 3.7
+_card(s, 0.7, 4.7, 12, 1.15, "Limiares e catálogo de sensores (JSON)",
+      "config/limiares.json — fonte única dos limiares de risco e da faixa (min/max) de cada sensor.",
       CYAN, title_size=14, body_size=13.5)
+_card(s, 0.7, 5.9, 12, 1.0, "Padronização de parâmetros (back-end)",
+      "'Vehicle speed (km/h)' e 'Velocidade do veículo (km/h)' → mapeados para o parâmetro canônico 'velocidade'.",
+      CYAN, title_size=14, body_size=12.5)
 
 # ================================================================ 6. ARQUITETURA
 s = _content_slide(5, "Arquitetura da Aplicação", accent=BLUE, page=6)
@@ -341,18 +333,19 @@ _text(s, 0.6, 5.35, 12.1, 1.3,
 s = _content_slide(7, "Endpoints da API", accent=BLUE, page=9)
 headers = ["Método", "Rota", "Descrição"]
 rows = [
-    ("GET / POST", "/telemetria/usuarios", "Listar / cadastrar usuários"),
-    ("POST", "/telemetria/usuarios/login", "Autenticação"),
     ("GET / POST", "/telemetria/rotas", "Listar / cadastrar rotas"),
     ("POST", "/telemetria/rotas/importar", "Importar CSV como rota"),
-    ("GET / PUT / DELETE", "/telemetria/rotas/<id>", "Selecionar / renomear / excluir"),
+    ("GET / PUT / DELETE", "/telemetria/rotas/<id>", "Selecionar / editar / excluir"),
     ("POST", "/telemetria/rotas/<id>/analisar", "Detecção de eventos de risco"),
     ("GET", "/telemetria/rotas/<id>/grafico", "Dados para o gráfico (e mapa)"),
     ("GET", "/telemetria/rotas/<id>/resumo", "Dashboard: score + estatísticas"),
     ("POST", "/telemetria/rotas/comparar", "Comparar resumos de rotas"),
     ("GET / POST", "/telemetria/leituras", "Listar / cadastrar leituras"),
-    ("GET / POST", "/telemetria/eventos-risco", "Listar (filtro por tipo) / cadastrar eventos"),
-    ("GET / PUT", "/telemetria/configuracoes/limiares", "Ler / ajustar os limiares"),
+    ("GET / PUT / DELETE", "/telemetria/leituras/<id>", "Selecionar / editar / excluir leitura"),
+    ("GET / POST", "/telemetria/eventos-risco", "Listar (filtros) / cadastrar eventos"),
+    ("GET / PUT / DELETE", "/telemetria/eventos-risco/<id>", "Selecionar / editar / excluir evento"),
+    ("GET", "/telemetria/limiares", "Ler os limiares (somente leitura)"),
+    ("GET", "/telemetria/sensores", "Catálogo de sensores/canais"),
 ]
 n_rows = len(rows) + 1
 gf = s.shapes.add_table(n_rows, 3, Inches(0.6), Inches(1.55), Inches(12.1), Inches(5.3))
@@ -387,10 +380,10 @@ table.columns[2].width = Inches(5.3)
 # ================================================================ 10. INTERFACE
 s = _content_slide(8, "Interface Gráfica", accent=TEAL, page=10)
 passos = [
-    ("1. Login", "Criação de conta e autenticação", BLUE),
+    ("1. Dados", "CRUD de rotas, leituras e eventos", BLUE),
     ("2. Cadastrar", "CSV vira uma rota nomeada", PURPLE),
     ("3. Análise", "Automática — sem botão", ORANGE),
-    ("4. Explorar", "Dashboard, eventos, gráfico e mapa", RED),
+    ("4. Explorar", "Visão Geral, gráfico, mapa e comparação", RED),
 ]
 x = 0.6
 for titulo, desc, cor in passos:
@@ -400,27 +393,27 @@ for titulo, desc, cor in passos:
     _text(s, x + 0.15, 3.4, 2.6, 0.6, desc, size=11.5, color=TEXT_DIM, align=PP_ALIGN.CENTER)
     x += 3.08
 _text(s, 0.6, 4.35, 12.1, 0.6,
-      "7 abas: Rotas · Dashboard · Eventos · Gráfico (painel) · Mapa (tkintermapview) · Comparar · Configurações.",
+      "Navegação lateral: Dados (Rotas · Leituras · Eventos) · Visão Geral · Gráfico · Mapa · Comparar.",
       size=14, color=TEXT, align=PP_ALIGN.CENTER)
-_card(s, 0.6, 5.2, 12.1, 1.5, "Centrada no usuário",
-      "Sem expor IDs: a seleção é feita clicando na lista de rotas.\n"
-      "Cadastro em lote via CSV, análise automática e limiares ajustáveis.",
+_card(s, 0.6, 5.2, 12.1, 1.5, "Sem expor IDs",
+      "A seleção é feita por combobox/listas (o ID fica interno).\n"
+      "Cadastro em lote via CSV, análise automática e CRUD completo nas três tabelas.",
       CYAN, title_size=14, body_size=14)
 
 # ================================================================ telas (capturas)
 s = prs.slides.add_slide(BLANK)
 _navy_bg(s)
-_text(s, 0.6, 0.4, 12, 0.7, "Login e Rotas", size=28, color=WHITE, bold=True)
+_text(s, 0.6, 0.4, 12, 0.7, "Dados (CRUD) e Visão Geral", size=28, color=WHITE, bold=True)
 _shape(s, MSO_SHAPE.RECTANGLE, 0.65, 1.15, 2.2, 0.06, fill=CYAN)
-_shot(s, os.path.join(IMGS, "login.png"), 0.9, 2.1, 3.4, "Tela de Login / Cadastro")
-_shot(s, os.path.join(IMGS, "rotas.png"), 4.9, 1.4, 7.8, "Tela de Rotas (cadastrar / renomear / excluir)")
+_shot(s, os.path.join(IMGS, "rotas.png"), 0.9, 2.1, 3.4, "Rotas (cadastrar / editar / excluir)")
+_shot(s, os.path.join(IMGS, "dashboard.png"), 4.9, 1.4, 7.8, "Visão Geral: score + estatísticas")
 _footer(s, 11)
 
 s = prs.slides.add_slide(BLANK)
 _navy_bg(s)
-_text(s, 0.6, 0.4, 12, 0.7, "Dashboard e Eventos de Risco", size=28, color=WHITE, bold=True)
+_text(s, 0.6, 0.4, 12, 0.7, "Leituras e Eventos de Risco", size=28, color=WHITE, bold=True)
 _shape(s, MSO_SHAPE.RECTANGLE, 0.65, 1.15, 2.2, 0.06, fill=CYAN)
-_shot(s, os.path.join(IMGS, "dashboard.png"), 0.55, 1.5, 5.9, "Dashboard: score + estatísticas")
+_shot(s, os.path.join(IMGS, "leituras.png"), 0.55, 1.5, 5.9, "Leituras (frames de telemetria)")
 _shot(s, os.path.join(IMGS, "eventos.png"), 6.9, 1.5, 5.9, "Eventos de risco (filtro por tipo)")
 _footer(s, 12)
 
@@ -435,11 +428,11 @@ _footer(s, 13)
 # ================================================================ 11. DEMONSTRAÇÃO
 s = _content_slide(9, "Demonstração do Funcionamento", accent=ORANGE, page=14)
 demos = [
-    ("Cadastro e login", "Criação de conta e autenticação (senha mínima de 6).", BLUE),
-    ("Cadastro em lote", "Arquivos CSV importados e padronizados como rotas.", PURPLE),
-    ("Regras de negócio", "Ex.: leitura de rota inexistente, usuário duplicado.", TEAL),
+    ("Cadastro em lote", "Arquivos CSV importados e padronizados como rotas.", BLUE),
+    ("CRUD completo", "Criar/ler/editar/excluir rotas, leituras e eventos.", PURPLE),
+    ("Regras de negócio", "Ex.: leitura de rota inexistente, leitura duplicada.", TEAL),
     ("Análise + classificações", "6 tipos de evento detectados pelos 3 métodos.", ORANGE),
-    ("Dashboard, mapa e score", "Score 0–100, gráfico, mapa GPS e configurações.", RED),
+    ("Dashboard, mapa e score", "Score 0–100, gráfico, mapa GPS e comparação.", RED),
 ]
 y = 1.7
 for titulo, texto, cor in demos:

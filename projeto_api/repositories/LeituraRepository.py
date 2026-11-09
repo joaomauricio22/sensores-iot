@@ -6,7 +6,7 @@ from entities.Base import db
 class LeituraRepository:
 
     def get_all(self):
-        return db.session.query(Leitura).all()
+        return db.session.query(Leitura).order_by(Leitura.rota_id, Leitura.data_hora).all()
 
     def get_by_id(self, leitura_id):
         return db.session.get(Leitura, leitura_id)
@@ -20,12 +20,24 @@ class LeituraRepository:
             .all()
         )
 
-    def find_duplicada(self, rota_id, data_hora):
+    def get_historico(self, rota_id, limite=5000):
+        """Leituras de outras rotas (histórico para o modelo de ML)."""
         return (
             db.session.query(Leitura)
-            .filter(Leitura.rota_id == rota_id, Leitura.data_hora == data_hora)
-            .first()
+            .filter(Leitura.rota_id != rota_id)
+            .order_by(Leitura.data_hora.desc())
+            .limit(limite)
+            .all()
         )
+
+    def find_duplicada(self, rota_id, data_hora, excluir_id=None):
+        query = db.session.query(Leitura).filter(
+            Leitura.rota_id == rota_id,
+            Leitura.data_hora == data_hora,
+        )
+        if excluir_id is not None:
+            query = query.filter(Leitura.id != excluir_id)
+        return query.first()
 
     def add(self, leitura: Leitura) -> Leitura:
         db.session.add(leitura)

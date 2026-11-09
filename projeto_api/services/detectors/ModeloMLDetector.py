@@ -18,16 +18,59 @@ from services.features import (
 #   2. normaliza com StandardScaler;
 #   3. DBSCAN separa condução normal (cluster denso) de eventos de risco (-1) — pseudo-rótulos;
 #   4. RandomForest aprende a classificar e sinaliza os eventos de risco.
+#
+# O treinamento usa as leituras das OUTRAS rotas (histórico). Quando ainda não
+# há histórico suficiente, usa a própria rota como fallback (regra 10).
 class ModeloMLDetector(DetectorAnomalia):
 
     MIN_AMOSTRAS = 30
 
-    def detectar(self, leituras, rota, limiares):
-        if len(leituras) < self.MIN_AMOSTRAS:
+    def detectar(self, leituras, rota, limiares, historico=None):
+        matriz_alvo, validas = self.__extrair_matriz(leituras)
+        if len(matriz_alvo) == 0:
             return []
 
-        acels = lista_aceleracoes_longitudinais(leituras)
+        matriz_treino, _ = self.__extrair_matriz(historico or [])
+        if len(matriz_treino) < self.MIN_AMOSTRAS:
+            # Fallback: aprende o padrão da própria rota.
+            matriz_treino = matriz_alvo
 
+        if len(matriz_treino) < self.MIN_AMOSTRAS:
+            return []
+
+        normalizador = StandardScaler().fit(np.array(matriz_treino))
+        X_treino = normalizador.transform(np.array(matriz_treino))
+        X_alvo = normalizador.transform(np.array(matriz_alvo))
+
+        # DBSCAN: pseudo-rotulagem (cluster denso = normal, -1 = risco/ruído).
+        labels = DBSCAN(eps=1.0, min_samples=15).fit(X_treino).labels_
+        y = np.where(labels == -1, 1, 0)  # 1 = risco, 0 = normal
+
+        # Sem as duas classes, não há como treinar o classificador.
+        if len(set(y.tolist())) < 2:
+            return []
+
+        modelo = RandomForestClassifier(n_estimators=100, random_state=42)
+        modelo.fit(X_treino, y)
+        pred = modelo.predict(X_alvo)
+
+        eventos = []
+        for i, leitura in enumerate(validas):
+            if pred[i] == 1:
+                eventos.append({
+                    "leitura": leitura,
+                    "canal": "multivariado",
+                    "valor": matriz_alvo[i][3],
+                    "forca_g": matriz_alvo[i][3],
+                    "instabilidade": matriz_alvo[i][1],
+                    "classificacao": "Comportamento atípico",
+                    "descricao": "Evento de risco classificado pelo modelo DBSCAN + RandomForest.",
+                })
+        return eventos
+
+    def __extrair_matriz(self, leituras):
+        """Extrai os atributos por leitura e devolve (matriz, leituras válidas)."""
+        acels = lista_aceleracoes_longitudinais(leituras)
         matriz = []
         validas = []
         for i, leitura in enumerate(leituras):
@@ -42,35 +85,7 @@ class ModeloMLDetector(DetectorAnomalia):
                 fg,                              # Força G resultante
             ])
             validas.append(leitura)
-
-        if len(matriz) < self.MIN_AMOSTRAS:
-            return []
-
-        X = StandardScaler().fit_transform(np.array(matriz))
-
-        # DBSCAN: pseudo-rotulagem (cluster denso = normal, -1 = risco/ruído).
-        labels = DBSCAN(eps=1.0, min_samples=15).fit(X).labels_
-        y = np.where(labels == -1, 1, 0)  # 1 = risco, 0 = normal
-
-        # Sem as duas classes, não há como treinar o classificador.
-        if len(set(y.tolist())) < 2:
-            return []
-
-        modelo = RandomForestClassifier(n_estimators=100, random_state=42)
-        modelo.fit(X, y)
-        pred = modelo.predict(X)
-
-        eventos = []
-        for i, leitura in enumerate(validas):
-            if pred[i] == 1:
-                eventos.append({
-                    "leitura": leitura,
-                    "forca_g": matriz[i][3],
-                    "instabilidade": matriz[i][1],
-                    "classificacao": "Comportamento atípico",
-                    "descricao": "Evento de risco classificado pelo modelo DBSCAN + RandomForest.",
-                })
-        return eventos
+        return matriz, validas
 
     def get_metodo(self):
         return "MODELO_ML"

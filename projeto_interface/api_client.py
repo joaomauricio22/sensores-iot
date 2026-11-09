@@ -1,6 +1,7 @@
 """Cliente HTTP da interface gráfica.
 
 Encapsula a comunicação com a API REST usando a biblioteca `requests`.
+A interface nunca acessa o banco diretamente: todo acesso passa pela API.
 """
 import requests
 
@@ -33,12 +34,12 @@ def _format_errors(errors) -> str:
 
 
 class ApiClient:
+    """Métodos HTTP de cada recurso exposto pela API."""
 
     BASE_URL = "http://localhost:8080/telemetria"
 
     def __init__(self, base_url: str = None):
         self.__base_url = base_url or self.BASE_URL
-        self.usuario_id = None
 
     def _url(self, resource, resource_id=None, extra=None):
         url = f"{self.__base_url}/{resource}"
@@ -48,40 +49,37 @@ class ApiClient:
             url += f"/{extra}"
         return url
 
-    # ---- Autenticação ----
-    def registrar(self, nome, senha):
-        return requests.post(self._url("usuarios"), json={"nome": nome, "senha": senha})
-
-    def login(self, nome, senha):
-        resp = requests.post(
-            self._url("usuarios", extra="login"), json={"nome": nome, "senha": senha}
-        )
-        if resp.status_code == 200:
-            self.usuario_id = resp.json().get("id")
-        return resp
-
-    # ---- Rotas ----
+    # ---- Rotas --------------------------------------------------------- #
     def list_rotas(self):
-        return requests.get(self._url("rotas"), params={"usuario_id": self.usuario_id})
+        return requests.get(self._url("rotas"))
+
+    def get_rota(self, rota_id):
+        return requests.get(self._url("rotas", rota_id))
+
+    def criar_rota(self, nome, arquivo_origem=None):
+        return requests.post(
+            self._url("rotas"),
+            json={"nome": nome, "arquivo_origem": arquivo_origem},
+        )
+
+    def atualizar_rota(self, rota_id, nome, arquivo_origem=None):
+        return requests.put(
+            self._url("rotas", rota_id),
+            json={"nome": nome, "arquivo_origem": arquivo_origem},
+        )
+
+    def excluir_rota(self, rota_id):
+        return requests.delete(self._url("rotas", rota_id))
 
     def importar_csv(self, nome, arquivo_origem, conteudo_csv):
         return requests.post(
             self._url("rotas", extra="importar"),
             json={
-                "usuario_id": self.usuario_id,
                 "nome": nome,
                 "arquivo_origem": arquivo_origem,
                 "conteudo_csv": conteudo_csv,
             },
         )
-
-    def renomear_rota(self, rota_id, nome):
-        return requests.put(
-            self._url("rotas", rota_id), json={"usuario_id": self.usuario_id, "nome": nome}
-        )
-
-    def excluir_rota(self, rota_id):
-        return requests.delete(self._url("rotas", rota_id))
 
     def analisar_rota(self, rota_id):
         return requests.post(self._url("rotas", rota_id, "analisar"))
@@ -93,18 +91,47 @@ class ApiClient:
         return requests.get(self._url("rotas", rota_id, "resumo"))
 
     def comparar_rotas(self, rota_ids):
-        return requests.post(self._url("rotas", extra="comparar"), json={"rota_ids": rota_ids})
+        return requests.post(
+            self._url("rotas", extra="comparar"), json={"rota_ids": rota_ids}
+        )
 
-    # ---- Eventos ----
-    def list_eventos(self, rota_id, tipo=None):
-        params = {"rota_id": rota_id}
+    # ---- Leituras ------------------------------------------------------ #
+    def list_leituras(self, rota_id=None):
+        params = {}
+        if rota_id is not None:
+            params["rota_id"] = rota_id
+        return requests.get(self._url("leituras"), params=params)
+
+    def criar_leitura(self, dados):
+        return requests.post(self._url("leituras"), json=dados)
+
+    def atualizar_leitura(self, leitura_id, dados):
+        return requests.put(self._url("leituras", leitura_id), json=dados)
+
+    def excluir_leitura(self, leitura_id):
+        return requests.delete(self._url("leituras", leitura_id))
+
+    # ---- Eventos de risco ---------------------------------------------- #
+    def list_eventos(self, rota_id=None, tipo=None):
+        params = {}
+        if rota_id is not None:
+            params["rota_id"] = rota_id
         if tipo:
             params["tipo"] = tipo
         return requests.get(self._url("eventos-risco"), params=params)
 
-    # ---- Configurações (limiares) ----
-    def get_limiares(self):
-        return requests.get(self._url("configuracoes", extra="limiares"))
+    def criar_evento(self, dados):
+        return requests.post(self._url("eventos-risco"), json=dados)
 
-    def set_limiares(self, limiares):
-        return requests.put(self._url("configuracoes", extra="limiares"), json=limiares)
+    def atualizar_evento(self, evento_id, dados):
+        return requests.put(self._url("eventos-risco", evento_id), json=dados)
+
+    def excluir_evento(self, evento_id):
+        return requests.delete(self._url("eventos-risco", evento_id))
+
+    # ---- Configuração (somente leitura) -------------------------------- #
+    def get_limiares(self):
+        return requests.get(self._url("limiares"))
+
+    def get_sensores(self):
+        return requests.get(self._url("sensores"))

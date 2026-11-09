@@ -5,7 +5,7 @@ from entities.EventoRisco import EventoRisco
 from repositories.EventoRiscoRepository import EventoRiscoRepository
 from repositories.LeituraRepository import LeituraRepository
 from repositories.RotaRepository import RotaRepository
-from services.ConfiguracaoService import ConfiguracaoService
+from services.LimiaresService import LimiaresService
 from services.detectors.LimiteDetector import LimiteDetector
 from services.detectors.EstatisticoDetector import EstatisticoDetector
 from services.detectors.ModeloMLDetector import ModeloMLDetector
@@ -28,7 +28,7 @@ PESOS_SCORE = {
 
 
 # Camada de serviço responsável pela ANÁLISE da telemetria.
-#   - Executa os detectores de risco (limite CTB, estatístico e ML);
+#   - Executa os detectores de risco (limite, estatístico e ML);
 #   - Classifica o tipo de cada evento (frenagem, aceleração, curva, etc.);
 #   - Fornece o resumo (dashboard + score) e os dados do gráfico/mapa.
 class AnaliseService:
@@ -37,7 +37,7 @@ class AnaliseService:
         self.__leitura_repository = LeituraRepository()
         self.__rota_repository = RotaRepository()
         self.__evento_repository = EventoRiscoRepository()
-        self.__configuracao_service = ConfiguracaoService()
+        self.__limiares_service = LimiaresService()
         self.__detectores = [LimiteDetector(), EstatisticoDetector(), ModeloMLDetector()]
 
     def analisar_rota(self, rota_id: int):
@@ -51,11 +51,13 @@ class AnaliseService:
             return []
 
         leituras = self.__leitura_repository.get_by_rota(rota_id)
-        limiares = self.__configuracao_service.get_limiares()
+        historico = self.__leitura_repository.get_historico(rota_id)
+        limiares = self.__limiares_service.get_limiares()
+        limiares["sensores"] = self.__limiares_service.get_sensores()
 
         detectados = []
         for detector in self.__detectores:
-            for evento in detector.detectar(leituras, rota, limiares):
+            for evento in detector.detectar(leituras, rota, limiares, historico=historico):
                 detectados.append((detector.get_metodo(), evento))
 
         existentes = set()
@@ -63,7 +65,8 @@ class AnaliseService:
         for metodo, evento in detectados:
             leitura = evento["leitura"]
             classificacao = evento.get("classificacao") or "Comportamento atípico"
-            chave = (leitura.id, metodo, classificacao)
+            canal = evento.get("canal") or "geral"
+            chave = (leitura.id, metodo, classificacao, canal)
             if chave in existentes:
                 continue
             existentes.add(chave)
@@ -72,6 +75,8 @@ class AnaliseService:
                 rota_id=rota_id,
                 data_hora=leitura.data_hora,
                 metodo=metodo,
+                canal=canal,
+                valor=evento.get("valor"),
                 forca_g=evento.get("forca_g"),
                 instabilidade=evento.get("instabilidade"),
                 classificacao=classificacao,

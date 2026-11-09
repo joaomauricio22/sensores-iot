@@ -1,16 +1,23 @@
-"""Teste da API — domínio de telemetria veicular (rotas por usuário).
+"""Testes de integração da API — modelo de 3 tabelas.
 
-Executar com a API em execução:  python test_api.py
+Pré-requisito: containers em execução (docker compose up -d).
+Executar:  python test_api.py
 """
 import time
+import uuid
 
 import requests
 
 BASE = "http://localhost:8080/telemetria"
-NOME_TESTE = f"teste_api_{int(time.time())}"
+SUFIXO = uuid.uuid4().hex[:8]
+
+falhas = 0
 
 
 def show(titulo, ok, detalhe=""):
+    global falhas
+    if not ok:
+        falhas += 1
     print(f"[{'OK' if ok else 'FALHOU'}] {titulo}" + (f" -> {detalhe}" if detalhe else ""))
 
 
@@ -32,112 +39,197 @@ Time (sec), Vehicle speed (km/h), Engine RPM (RPM), Accel X (m/s²), Accel Y (m/
 
 
 def main():
-    # ---- Cadastro e login ----
-    r = requests.post(f"{BASE}/usuarios", json={"nome": NOME_TESTE, "senha": "123"})
-    show("POST usuário senha curta (400)", r.status_code == 400, f"{r.status_code}")
+    rota_id = None
+    leitura_id = None
+    evento_id = None
 
-    r = requests.post(f"{BASE}/usuarios", json={"nome": NOME_TESTE, "senha": "123456"})
-    show("POST usuário (201)", r.status_code == 201, f"{r.status_code}")
-    usuario_id = r.json().get("id") if r.status_code == 201 else None
+    try:
+        # ---------------------------------------------------------------- #
+        # Configuração somente leitura (JSON)
+        # ---------------------------------------------------------------- #
+        r = requests.get(f"{BASE}/limiares")
+        show("GET limiares (200)", r.status_code == 200 and "velocidade_max" in r.json())
+        r = requests.get(f"{BASE}/sensores")
+        show("GET sensores (200, 8 canais)",
+             r.status_code == 200 and len(r.json()) == 8,
+             f"{r.status_code} {len(r.json()) if r.status_code == 200 else ''}")
+        r = requests.put(f"{BASE}/limiares", json={"velocidade_max": 120})
+        show("PUT limiares bloqueado (405)", r.status_code == 405, f"{r.status_code}")
 
-    r = requests.post(f"{BASE}/usuarios", json={"nome": NOME_TESTE, "senha": "123456"})
-    show("POST usuário duplicado (400)", r.status_code == 400, f"{r.status_code}")
+        # ---------------------------------------------------------------- #
+        # CRUD de Rota
+        # ---------------------------------------------------------------- #
+        r = requests.post(f"{BASE}/rotas", json={"nome": ""})
+        show("POST rota sem nome (400)", r.status_code == 400, f"{r.status_code}")
 
-    r = requests.post(f"{BASE}/usuarios/login", json={"nome": NOME_TESTE, "senha": "errada"})
-    show("POST login senha errada (401)", r.status_code == 401, f"{r.status_code}")
+        r = requests.post(f"{BASE}/rotas", json={
+            "nome": f"Rota teste {SUFIXO}",
+            "arquivo_origem": "teste.csv",
+        })
+        show("POST rota (201)", r.status_code == 201, f"{r.status_code} {r.text[:80]}")
+        if r.status_code == 201:
+            rota_id = r.json()["id"]
 
-    r = requests.post(f"{BASE}/usuarios/login", json={"nome": NOME_TESTE, "senha": "123456"})
-    show("POST login correto (200)", r.status_code == 200, f"{r.status_code}")
+        r = requests.get(f"{BASE}/rotas/{rota_id}")
+        show("GET rota (200)", r.status_code == 200)
 
-    # ---- Importar CSV como rota ----
-    r = requests.post(f"{BASE}/rotas/importar", json={
-        "usuario_id": usuario_id, "nome": "Rota de Teste",
-        "arquivo_origem": "teste.csv", "conteudo_csv": CSV_EXEMPLO,
-    })
-    show("POST importar CSV (201)", r.status_code == 201, f"{r.status_code} {r.text[:80]}")
-    rota_id = r.json().get("rota_id") if r.status_code == 201 else None
+        r = requests.put(f"{BASE}/rotas/{rota_id}", json={
+            "nome": f"Rota teste {SUFIXO} (editada)",
+            "arquivo_origem": "teste.csv",
+        })
+        show("PUT rota (200)", r.status_code == 200 and "editada" in r.json().get("nome", ""))
 
-    # ---- Rotas do usuário ----
-    r = requests.get(f"{BASE}/rotas", params={"usuario_id": usuario_id})
-    show("GET rotas do usuário (200)", r.status_code == 200 and len(r.json()) >= 1)
+        r = requests.get(f"{BASE}/rotas/999999")
+        show("GET rota inexistente (404)", r.status_code == 404)
 
-    # ---- Análise, gráfico, resumo e eventos ----
-    if rota_id:
-        r = requests.post(f"{BASE}/rotas/{rota_id}/analisar")
-        show("POST analisar rota (200)", r.status_code == 200, f"{r.status_code}")
-
-        r = requests.get(f"{BASE}/rotas/{rota_id}/grafico")
-        show("GET gráfico da rota (200)", r.status_code == 200 and "pontos" in r.json())
-
-        r = requests.get(f"{BASE}/rotas/{rota_id}/resumo")
-        show("GET resumo da rota (200, com score)",
-             r.status_code == 200 and "score" in r.json())
-
-        r = requests.get(f"{BASE}/eventos-risco", params={"rota_id": rota_id})
-        show("GET eventos da rota (200)", r.status_code == 200)
-
-        r = requests.get(f"{BASE}/eventos-risco",
-                         params={"rota_id": rota_id, "tipo": "Frenagem brusca"})
-        show("GET eventos filtro por tipo (200)", r.status_code == 200)
-
-    # ---- Configurações (limiares) ----
-    r = requests.get(f"{BASE}/configuracoes/limiares")
-    show("GET limiares (200)", r.status_code == 200 and "velocidade_max" in r.json())
-    velocidade_original = r.json().get("velocidade_max", 100)
-
-    r = requests.put(f"{BASE}/configuracoes/limiares",
-                     json={"velocidade_max": velocidade_original + 5})
-    show("PUT limiares reanalisa rotas (200)",
-         r.status_code == 200 and "rotas_reanalisadas" in r.json(),
-         f"{r.status_code} {r.text[:80]}")
-
-    # Restaura o limiar original para não deixar a configuração alterada.
-    requests.put(f"{BASE}/configuracoes/limiares",
-                 json={"velocidade_max": velocidade_original})
-
-    # ---- CRUD de configurações ----
-    r = requests.post(f"{BASE}/configuracoes", json={"chave": "teste_config", "valor": "abc"})
-    show("POST configuração (201)", r.status_code == 201, f"{r.status_code}")
-    config_id = r.json().get("id") if r.status_code == 201 else None
-
-    r = requests.post(f"{BASE}/configuracoes", json={"chave": "teste_config", "valor": "xyz"})
-    show("POST configuração duplicada (400)", r.status_code == 400, f"{r.status_code}")
-
-    if config_id:
-        r = requests.put(f"{BASE}/configuracoes/{config_id}", json={"valor": "def"})
-        show("PUT configuração (200)",
-             r.status_code == 200 and r.json().get("valor") == "def")
-
-        r = requests.delete(f"{BASE}/configuracoes/{config_id}")
-        show("DELETE configuração (200)", r.status_code == 200)
-
-    # ---- Comparação ----
-    if rota_id:
-        r = requests.post(f"{BASE}/rotas/comparar", json={"rota_ids": [rota_id]})
-        show("POST comparar rotas (200)", r.status_code == 200)
-
-    # ---- Regras de negócio ----
-    if rota_id:
+        # ---------------------------------------------------------------- #
+        # CRUD de Leitura + regras de negócio
+        # ---------------------------------------------------------------- #
         r = requests.post(f"{BASE}/leituras", json={
-            "rota_id": 999999, "data_hora": "2026-11-06T10:00:00",
+            "rota_id": 999999, "data_hora": "2026-01-21T10:00:00", "velocidade": 50,
         })
         show("POST leitura rota inexistente (400)", r.status_code == 400, f"{r.status_code}")
 
-    r = requests.get(f"{BASE}/rotas/999999")
-    show("GET rota inexistente (404)", r.status_code == 404)
+        r = requests.post(f"{BASE}/leituras", json={
+            "rota_id": rota_id, "data_hora": "2026-01-21T10:00:00",
+        })
+        show("POST leitura sem valor medido (400)", r.status_code == 400, f"{r.status_code}")
 
-    r = requests.delete(f"{BASE}/usuarios/{usuario_id}")
-    show("DELETE usuário com rotas (409)", r.status_code == 409, f"{r.status_code}")
+        r = requests.post(f"{BASE}/leituras", json={
+            "rota_id": rota_id, "data_hora": "2026-01-21T10:00:00",
+            "velocidade": 80, "rpm": 2500, "accel_x": 1.0, "accel_y": 0.5,
+            "accel_z": 9.8, "posicao_acelerador": 30, "latitude": -23.5,
+            "longitude": -46.6,
+        })
+        show("POST leitura (201)", r.status_code == 201, f"{r.status_code} {r.text[:80]}")
+        if r.status_code == 201:
+            leitura_id = r.json()["id"]
 
-    # Limpeza: exclui a rota (cascata em leituras/eventos) e depois o usuário.
-    if rota_id:
-        r = requests.delete(f"{BASE}/rotas/{rota_id}")
-        show("DELETE rota com leituras (200)", r.status_code == 200, f"{r.status_code}")
+        r = requests.post(f"{BASE}/leituras", json={
+            "rota_id": rota_id, "data_hora": "2026-01-21T10:00:00", "velocidade": 90,
+        })
+        show("POST leitura duplicada (400)", r.status_code == 400, f"{r.status_code}")
 
-    r = requests.delete(f"{BASE}/usuarios/{usuario_id}")
-    show("DELETE usuário sem rotas (200)", r.status_code == 200, f"{r.status_code}")
+        r = requests.get(f"{BASE}/leituras", params={"rota_id": rota_id})
+        show("GET leituras da rota (200)", r.status_code == 200 and len(r.json()) == 1)
+
+        r = requests.put(f"{BASE}/leituras/{leitura_id}", json={
+            "rota_id": rota_id, "data_hora": "2026-01-21T10:00:00",
+            "velocidade": 85, "rpm": 2600,
+        })
+        show("PUT leitura (200)", r.status_code == 200 and r.json().get("velocidade") == 85)
+
+        r = requests.put(f"{BASE}/leituras/{leitura_id}", json={
+            "rota_id": rota_id, "data_hora": "2026-01-21T10:00:00",
+        })
+        show("PUT leitura sem valor medido (400)", r.status_code == 400, f"{r.status_code}")
+
+        # ---------------------------------------------------------------- #
+        # CRUD de EventoRisco
+        # ---------------------------------------------------------------- #
+        r = requests.post(f"{BASE}/eventos-risco", json={
+            "leitura_id": leitura_id, "metodo": "INVALIDO",
+        })
+        show("POST evento método inválido (400)", r.status_code == 400, f"{r.status_code}")
+
+        r = requests.post(f"{BASE}/eventos-risco", json={
+            "leitura_id": leitura_id, "metodo": "LIMITE", "canal": "inexistente",
+        })
+        show("POST evento canal inválido (400)", r.status_code == 400, f"{r.status_code}")
+
+        r = requests.post(f"{BASE}/eventos-risco", json={
+            "leitura_id": 999999, "metodo": "LIMITE",
+        })
+        show("POST evento leitura inexistente (400)", r.status_code == 400, f"{r.status_code}")
+
+        r = requests.post(f"{BASE}/eventos-risco", json={
+            "leitura_id": leitura_id, "metodo": "LIMITE", "canal": "velocidade",
+            "valor": 130, "classificacao": "Excesso de velocidade",
+        })
+        show("POST evento (201)", r.status_code == 201, f"{r.status_code} {r.text[:80]}")
+        if r.status_code == 201:
+            evento_id = r.json()["id"]
+            show("Evento deriva rota/data da leitura",
+                 r.json()["rota_id"] == rota_id and r.json()["data_hora"] is not None)
+
+        r = requests.get(f"{BASE}/eventos-risco", params={"rota_id": rota_id})
+        show("GET eventos da rota (200)", r.status_code == 200 and len(r.json()) == 1)
+
+        r = requests.get(f"{BASE}/eventos-risco",
+                         params={"rota_id": rota_id, "tipo": "Excesso de velocidade"})
+        show("GET eventos filtro por tipo (200)", r.status_code == 200 and len(r.json()) == 1)
+
+        r = requests.put(f"{BASE}/eventos-risco/{evento_id}", json={
+            "leitura_id": leitura_id, "metodo": "LIMITE", "canal": "velocidade",
+            "valor": 140, "classificacao": "Excesso de velocidade",
+        })
+        show("PUT evento (200)", r.status_code == 200 and r.json().get("valor") == 140)
+
+        # ---------------------------------------------------------------- #
+        # Importação de CSV e análise
+        # ---------------------------------------------------------------- #
+        r = requests.post(f"{BASE}/rotas/importar", json={
+            "nome": f"Rota CSV {SUFIXO}", "arquivo_origem": "teste.csv",
+            "conteudo_csv": CSV_EXEMPLO,
+        })
+        show("POST importar CSV (201)", r.status_code == 201, f"{r.status_code} {r.text[:80]}")
+        rota_csv_id = r.json().get("rota_id") if r.status_code == 201 else None
+        if r.status_code == 201:
+            show("Importação informa limpeza",
+                 "limpeza" in r.json() and r.json()["total_leituras"] == 11,
+                 str(r.json().get("limpeza")))
+
+        if rota_csv_id:
+            r = requests.post(f"{BASE}/rotas/{rota_csv_id}/analisar")
+            show("POST analisar rota (200)", r.status_code == 200, f"{r.status_code}")
+            r = requests.get(f"{BASE}/rotas/{rota_csv_id}/grafico")
+            show("GET gráfico da rota (200)",
+                 r.status_code == 200 and "pontos" in r.json())
+            r = requests.get(f"{BASE}/rotas/{rota_csv_id}/resumo")
+            show("GET resumo com score (200)",
+                 r.status_code == 200 and "score" in r.json())
+            r = requests.post(f"{BASE}/rotas/comparar",
+                              json={"rota_ids": [rota_csv_id, rota_id]})
+            show("POST comparar rotas (200)",
+                 r.status_code == 200 and len(r.json().get("rotas", [])) == 2)
+            r = requests.post(f"{BASE}/rotas/comparar", json={})
+            show("POST comparar sem rota_ids (400)", r.status_code == 400, f"{r.status_code}")
+
+        # ---------------------------------------------------------------- #
+        # Exclusões e cascade
+        # ---------------------------------------------------------------- #
+        if evento_id:
+            r = requests.delete(f"{BASE}/eventos-risco/{evento_id}")
+            show("DELETE evento (200)", r.status_code == 200, f"{r.status_code}")
+
+        if leitura_id:
+            r = requests.delete(f"{BASE}/leituras/{leitura_id}")
+            show("DELETE leitura (200)", r.status_code == 200, f"{r.status_code}")
+
+        if rota_csv_id:
+            r = requests.delete(f"{BASE}/rotas/{rota_csv_id}")
+            show("DELETE rota remove leituras/eventos (200)", r.status_code == 200)
+            r = requests.get(f"{BASE}/leituras", params={"rota_id": rota_csv_id})
+            show("Cascade: leituras removidas", r.status_code == 200 and r.json() == [])
+            r = requests.get(f"{BASE}/eventos-risco", params={"rota_id": rota_csv_id})
+            show("Cascade: eventos removidos", r.status_code == 200 and r.json() == [])
+
+        if rota_id:
+            r = requests.delete(f"{BASE}/rotas/{rota_id}")
+            show("DELETE rota de teste (200)", r.status_code == 200, f"{r.status_code}")
+            r = requests.get(f"{BASE}/rotas/{rota_id}")
+            show("Rota excluída não existe (404)", r.status_code == 404)
+
+    finally:
+        # Garante que o banco volte ao estado vazio mesmo se um teste falhar.
+        if rota_id:
+            requests.delete(f"{BASE}/rotas/{rota_id}")
 
     print("\nTestes concluídos.")
+    if falhas:
+        print(f"FALHAS: {falhas}")
+        raise SystemExit(1)
+    print("Todos os testes passaram.")
 
 
 if __name__ == "__main__":

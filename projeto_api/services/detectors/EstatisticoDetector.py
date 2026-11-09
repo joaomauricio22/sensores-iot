@@ -14,12 +14,14 @@ from services.features import (
 # significativamente diferentes do padrão de condução.
 class EstatisticoDetector(DetectorAnomalia):
 
-    LIMIAR_ZSCORE = 3.0
+    LIMIAR_ZSCORE_PADRAO = 3.0
 
-    def detectar(self, leituras, rota, limiares):
+    def detectar(self, leituras, rota, limiares, historico=None):
         forcas = [forca_g_resultante(l) for l in leituras if forca_g_resultante(l) is not None]
         if len(forcas) < 2:
             return []
+
+        limiar = float(limiares.get("zscore_max", self.LIMIAR_ZSCORE_PADRAO))
 
         media = statistics.mean(forcas)
         desvio = statistics.stdev(forcas)
@@ -33,15 +35,17 @@ class EstatisticoDetector(DetectorAnomalia):
             if fg is None:
                 continue
             zscore = abs(fg - media) / desvio
-            if zscore > self.LIMIAR_ZSCORE:
+            if zscore > limiar:
                 eventos.append({
                     "leitura": leitura,
+                    "canal": "forca_g",
+                    "valor": fg,
                     "forca_g": fg,
                     "instabilidade": instabilidade_janela(acels, i),
                     "classificacao": "Comportamento atípico",
                     "descricao": (
                         f"Força G de {fg:.2f} m/s² com z-score {zscore:.1f} "
-                        f"(acima de {self.LIMIAR_ZSCORE})."
+                        f"(acima de {limiar:.1f})."
                     ),
                 })
         return eventos

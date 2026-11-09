@@ -17,7 +17,11 @@ class Leitura(db.Model):
     )
 
     id = Column("id_leitura", Integer, primary_key=True)
-    rota_id = Column("rota_id", Integer, ForeignKey("rota.id_rota"), nullable=False)
+    rota_id = Column(
+        "rota_id", Integer,
+        ForeignKey("rota.id_rota", ondelete="CASCADE"),
+        nullable=False,
+    )
     data_hora = Column("data_hora", DateTime, nullable=False)
 
     velocidade = Column("velocidade", Float)
@@ -29,7 +33,13 @@ class Leitura(db.Model):
     latitude = Column("latitude", Float)
     longitude = Column("longitude", Float)
 
-    rota = relationship("Rota", backref="leituras")
+    rota = relationship("Rota", back_populates="leituras")
+    eventos_risco = relationship(
+        "EventoRisco",
+        back_populates="leitura",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     def __repr__(self):
         return f"<Leitura id={self.id} rota={self.rota_id} data_hora={self.data_hora}>"

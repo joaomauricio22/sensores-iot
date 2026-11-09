@@ -7,8 +7,7 @@ from marshmallow import ValidationError
 from entities.Base import db
 from entities.Leitura import Leitura
 from entities.Rota import Rota
-from repositories.RotaRepository import RotaRepository
-from repositories.UsuarioRepository import UsuarioRepository
+from services.limpeza import limpar_leituras
 
 
 # Padronização dos parâmetros (back-end): traduz os nomes brutos das colunas
@@ -36,28 +35,47 @@ MAPEAMENTO_PADRAO = {
 # criando a Rota e as Leituras correspondentes, com padronização dos parâmetros.
 class ImportadorService:
 
-    def __init__(self):
-        self.__rota_repository = RotaRepository()
-        self.__usuario_repository = UsuarioRepository()
+    def importar_csv(self, nome: str, arquivo_origem: str, conteudo_csv: str) -> dict:
+        """Importa um CSV (texto), criando a Rota e as Leituras.
 
-    def importar_csv(self, usuario_id: int, nome: str, arquivo_origem: str, conteudo_csv: str) -> dict:
-        """Importa um CSV (texto) para um usuário, criando a Rota e as Leituras."""
-        if self.__usuario_repository.get_by_id(usuario_id) is None:
-            raise ValidationError("Usuário não cadastrado.")
+        O CSV é lido e validado antes de a rota ser criada. Se algo falhar,
+        nada é persistido (transação única).
+        """
         if not nome or not str(nome).strip():
             raise ValidationError("O nome da rota é obrigatório.")
 
-        rota = self.__rota_repository.add(
-            Rota(usuario_id=usuario_id, nome=nome, arquivo_origem=arquivo_origem)
-        )
+        registros = self.__parse(conteudo_csv)
+        if not registros:
+            raise ValidationError("O arquivo não possui leituras válidas.")
 
-        leituras = self.__parse(rota.id, conteudo_csv)
-        db.session.add_all(leituras)
-        db.session.commit()
+        registros, relatorio = limpar_leituras(registros)
+        if not registros:
+            raise ValidationError(
+                "Todas as leituras foram descartadas pela limpeza dos dados."
+            )
 
-        return {"rota_id": rota.id, "total_leituras": len(leituras)}
+        rota = Rota(nome=str(nome).strip(), arquivo_origem=arquivo_origem)
+        try:
+            db.session.add(rota)
+            db.session.flush()  # garante o id da rota antes das leituras
 
-    def __parse(self, rota_id: int, conteudo_csv: str) -> list:
+            leituras = [
+                Leitura(rota_id=rota.id, **registro)
+                for registro in registros
+            ]
+            db.session.add_all(leituras)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
+
+        return {
+            "rota_id": rota.id,
+            "total_leituras": len(leituras),
+            "limpeza": relatorio,
+        }
+
+    def __parse(self, conteudo_csv: str) -> list:
         reader = csv.reader(io.StringIO(conteudo_csv))
         start_time = None
         colunas = []
@@ -78,18 +96,26 @@ class ImportadorService:
         indice_time = next(
             (i for i, c in enumerate(colunas) if c.lower().startswith("time")), None
         )
+        if indice_time is None:
+            raise ValidationError("Coluna de tempo não encontrada no arquivo CSV.")
+
         indice_atributo = {}
         for i, nome in enumerate(colunas):
             if nome in MAPEAMENTO_PADRAO:
                 indice_atributo[i] = MAPEAMENTO_PADRAO[nome]
 
+        if not indice_atributo:
+            raise ValidationError(
+                "Nenhuma coluna de telemetria reconhecida no arquivo CSV."
+            )
+
         existentes = set()
-        leituras = []
+        registros = []
         for row in reader:
             if not row:
                 continue
             try:
-                offset = float(row[indice_time]) if indice_time is not None else 0.0
+                offset = float(row[indice_time])
             except (ValueError, IndexError, TypeError):
                 continue
             data_hora = start_time + timedelta(seconds=offset)
@@ -98,7 +124,7 @@ class ImportadorService:
                 continue
             existentes.add(data_hora)
 
-            dados = {}
+            dados = {"data_hora": data_hora}
             for i, atributo in indice_atributo.items():
                 if i < len(row) and row[i].strip() != "":
                     try:
@@ -106,9 +132,12 @@ class ImportadorService:
                     except ValueError:
                         pass
 
-            leituras.append(Leitura(rota_id=rota_id, data_hora=data_hora, **dados))
+            # Regra 2: uma leitura sem nenhum valor medido não é registrada.
+            if len(dados) <= 1:
+                continue
+            registros.append(dados)
 
-        return leituras
+        return registros
 
     @staticmethod
     def __parse_start_time(linha: str) -> datetime:

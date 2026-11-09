@@ -2,8 +2,11 @@ from marshmallow import ValidationError
 
 from entities.EventoRisco import EventoRisco
 from repositories.EventoRiscoRepository import EventoRiscoRepository
+from repositories.LeituraRepository import LeituraRepository
+from services.LimiaresService import LimiaresService
 
 METODOS_VALIDOS = {"LIMITE", "ESTATISTICO", "MODELO_ML"}
+CANAIS_ESPECIAIS = {"geral", "forca_g", "multivariado"}
 
 
 # Camada de serviço: regras de negócio e CRUD da entidade EventoRisco.
@@ -11,6 +14,8 @@ class EventoRiscoService:
 
     def __init__(self):
         self.__repository = EventoRiscoRepository()
+        self.__leitura_repository = LeituraRepository()
+        self.__limiares_service = LimiaresService()
 
     def get_all(self, tipo=None):
         return self.__repository.get_all(tipo)
@@ -21,22 +26,20 @@ class EventoRiscoService:
     def get_by_rota(self, rota_id, tipo=None):
         return self.__repository.get_by_rota(rota_id, tipo)
 
-    def add(self, leitura_id: int, rota_id: int, data_hora, metodo: str,
-            forca_g=None, instabilidade=None, classificacao=None, descricao=None) -> EventoRisco:
-        if leitura_id is None or rota_id is None:
-            raise ValidationError("A leitura e a rota são obrigatórias.")
-        if data_hora is None:
-            raise ValidationError("A data/hora é obrigatória.")
-        if not metodo or not str(metodo).strip():
-            raise ValidationError("O método de identificação é obrigatório.")
-        if metodo not in METODOS_VALIDOS:
-            raise ValidationError("Método inválido. Use um destes: LIMITE, ESTATISTICO ou MODELO_ML.")
+    def add(self, leitura_id: int, metodo: str, rota_id: int = None,
+            data_hora=None, canal: str = None, valor=None, forca_g=None,
+            instabilidade=None, classificacao=None, descricao=None) -> EventoRisco:
+        leitura = self.__validar_leitura(leitura_id, rota_id, data_hora)
+        metodo = self.__validar_metodo(metodo)
+        canal = self.__validar_canal(canal)
 
         evento = EventoRisco(
-            leitura_id=leitura_id,
-            rota_id=rota_id,
-            data_hora=data_hora,
+            leitura_id=leitura.id,
+            rota_id=leitura.rota_id,
+            data_hora=leitura.data_hora,
             metodo=metodo,
+            canal=canal,
+            valor=valor,
             forca_g=forca_g,
             instabilidade=instabilidade,
             classificacao=classificacao or "Comportamento atípico",
@@ -44,17 +47,24 @@ class EventoRiscoService:
         )
         return self.__repository.add(evento)
 
-    def update(self, evento_id: int, leitura_id: int, rota_id: int, data_hora,
-               metodo: str, forca_g=None, instabilidade=None, classificacao=None, descricao=None):
+    def update(self, evento_id: int, leitura_id: int, metodo: str,
+               rota_id: int = None, data_hora=None, canal: str = None,
+               valor=None, forca_g=None, instabilidade=None,
+               classificacao=None, descricao=None):
         evento = self.__repository.get_by_id(evento_id)
         if not evento:
             return None
-        if metodo not in METODOS_VALIDOS:
-            raise ValidationError("Método inválido. Use um destes: LIMITE, ESTATISTICO ou MODELO_ML.")
-        evento.leitura_id = leitura_id
-        evento.rota_id = rota_id
-        evento.data_hora = data_hora
+
+        leitura = self.__validar_leitura(leitura_id, rota_id, data_hora)
+        metodo = self.__validar_metodo(metodo)
+        canal = self.__validar_canal(canal)
+
+        evento.leitura_id = leitura.id
+        evento.rota_id = leitura.rota_id
+        evento.data_hora = leitura.data_hora
         evento.metodo = metodo
+        evento.canal = canal
+        evento.valor = valor
         evento.forca_g = forca_g
         evento.instabilidade = instabilidade
         evento.classificacao = classificacao or "Comportamento atípico"
@@ -66,3 +76,39 @@ class EventoRiscoService:
         if not evento:
             return None
         return self.__repository.delete(evento)
+
+    # ------------------------------------------------------------------ #
+    # Validações
+    # ------------------------------------------------------------------ #
+    def __validar_leitura(self, leitura_id, rota_id, data_hora):
+        if leitura_id is None:
+            raise ValidationError("A leitura é obrigatória.")
+        leitura = self.__leitura_repository.get_by_id(leitura_id)
+        if leitura is None:
+            raise ValidationError("A leitura informada não está cadastrada.")
+        if rota_id is not None and rota_id != leitura.rota_id:
+            raise ValidationError("A rota informada não corresponde à rota da leitura.")
+        if data_hora is not None and data_hora != leitura.data_hora:
+            raise ValidationError("A data/hora informada não corresponde à data/hora da leitura.")
+        return leitura
+
+    def __validar_metodo(self, metodo):
+        if not metodo or not str(metodo).strip():
+            raise ValidationError("O método de identificação é obrigatório.")
+        metodo = str(metodo).strip()
+        if metodo not in METODOS_VALIDOS:
+            raise ValidationError(
+                "Método inválido. Use um destes: LIMITE, ESTATISTICO ou MODELO_ML."
+            )
+        return metodo
+
+    def __validar_canal(self, canal):
+        canal = str(canal).strip() if canal and str(canal).strip() else "geral"
+        if canal in CANAIS_ESPECIAIS:
+            return canal
+        if canal not in self.__limiares_service.get_sensores():
+            raise ValidationError(
+                f"Canal '{canal}' não cadastrado. Use um sensor do catálogo "
+                "ou um dos canais especiais: geral, forca_g, multivariado."
+            )
+        return canal

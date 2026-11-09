@@ -1,9 +1,10 @@
 """Captura as telas da interface gráfica (para inserir nos slides).
 
-Abre a janela Tkinter com os dados reais da API e fotografa cada aba.
+Abre a janela Tkinter com dados de exemplo criados pela API, fotografa cada
+seção e remove a rota de exemplo ao final.
 As imagens são salvas em ../apresentacao/imgs/*.png
 
-Executar (com a API no ar e um usuário/rota criados):
+Executar (com a API no ar):
     python capturar_telas.py
 """
 import os
@@ -15,7 +16,7 @@ from PIL import ImageGrab
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from api_client import ApiClient
-from main import App, LoginWindow
+from main import App
 
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "apresentacao", "imgs")
 
@@ -54,48 +55,50 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     api = ApiClient()
 
-    # Prepara um usuário e uma rota de exemplo.
-    r = api.registrar("joao", "123456")
-    if r.status_code in (200, 201):
-        api.usuario_id = r.json().get("id")
-    else:
-        api.login("joao", "123456")
-    import requests
-    r = requests.post(f"{ApiClient.BASE_URL}/rotas/importar", json={
-        "usuario_id": api.usuario_id, "nome": "Rota de Exemplo",
-        "arquivo_origem": "exemplo.csv", "conteudo_csv": CSV,
-    })
-    rota_id = r.json()["rota_id"]
+    # Cria uma rota de exemplo para as capturas.
+    resp = api.importar_csv("Rota de Exemplo", "exemplo.csv", CSV)
+    if resp.status_code not in (200, 201):
+        print("Não foi possível criar a rota de exemplo:", resp.text)
+        return
+    rota_id = resp.json()["rota_id"]
+    api.analisar_rota(rota_id)
 
-    # Tela de login.
-    root = tk.Tk()
-    LoginWindow(root, api)
-    root.update()
-    capture(root, "login.png")
-    root.destroy()
-
-    # Janela principal.
     root = tk.Tk()
     app = App(root, api)
-    app.rota_atual_id = rota_id
-    app.refresh_detalhes()
+    app.definir_rota(rota_id)
     root.update()
 
-    capturas = [
-        (app.rota_tab, "rotas.png", 0.4),
-        (app.dashboard_tab, "dashboard.png", 0.4),
-        (app.eventos_tab, "eventos.png", 0.4),
-        (app.grafico_tab, "grafico.png", 0.6),
-        (app.mapa_tab, "mapa.png", 2.5),
-        (app.config_tab, "config.png", 0.4),
-    ]
-    for tab, nome, delay in capturas:
-        app.notebook.select(tab)
+    # Dados → Rotas / Leituras / Eventos
+    app.mostrar("dados")
+    app.secoes["dados"].notebook.select(app.secoes["dados"].rota_tab)
+    root.update()
+    capture(root, "rotas.png")
+
+    app.secoes["dados"].notebook.select(app.secoes["dados"].leitura_tab)
+    app.secoes["dados"].leitura_tab.atualizar()
+    root.update()
+    capture(root, "leituras.png")
+
+    app.secoes["dados"].notebook.select(app.secoes["dados"].evento_tab)
+    app.secoes["dados"].evento_tab.atualizar()
+    root.update()
+    capture(root, "eventos.png")
+
+    # Demais seções
+    for chave, nome, delay in [
+        ("visao", "dashboard.png", 0.5),
+        ("grafico", "grafico.png", 0.7),
+        ("mapa", "mapa.png", 2.5),
+        ("comparar", "comparar.png", 0.4),
+    ]:
+        app.mostrar(chave)
         root.update()
-        time.sleep(0.4)
         capture(root, nome, delay)
 
     root.destroy()
+
+    # Remove a rota de exemplo para deixar o banco como estava.
+    api.excluir_rota(rota_id)
     print("Capturas concluídas.")
 
 

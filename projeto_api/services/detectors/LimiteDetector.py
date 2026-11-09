@@ -15,9 +15,12 @@ from services.features import (
 #   - Excesso de velocidade     (velocidade acima do máximo)
 #   - RPM excessivo             (rotação do motor acima do máximo)
 #   - Acelerador brusco         (variação rápida da posição do acelerador)
+#
+# Cada evento aponta o canal (sensor) responsável e o valor observado nele,
+# permitindo rastrear qual parâmetro disparou o alerta.
 class LimiteDetector(DetectorAnomalia):
 
-    def detectar(self, leituras, rota, limiares):
+    def detectar(self, leituras, rota, limiares, historico=None):
         acels = lista_aceleracoes_longitudinais(leituras)
         eventos = []
 
@@ -30,7 +33,7 @@ class LimiteDetector(DetectorAnomalia):
             # Frenagem brusca: desaceleração mais intensa que o limite.
             if acel < limiares["frenagem_max"]:
                 eventos.append(self._evento(
-                    leitura, fg, inst, "Frenagem brusca",
+                    leitura, "accel_x", acel, fg, inst, "Frenagem brusca",
                     f"Desaceleração de {acel:.2f} m/s² "
                     f"(limite: {limiares['frenagem_max']:.1f} m/s²).",
                 ))
@@ -38,7 +41,7 @@ class LimiteDetector(DetectorAnomalia):
             # Aceleração brusca: aceleração mais intensa que o limite.
             if acel > limiares["aceleracao_max"]:
                 eventos.append(self._evento(
-                    leitura, fg, inst, "Aceleração brusca",
+                    leitura, "accel_x", acel, fg, inst, "Aceleração brusca",
                     f"Aceleração de {acel:.2f} m/s² "
                     f"(limite: {limiares['aceleracao_max']:.1f} m/s²).",
                 ))
@@ -51,7 +54,8 @@ class LimiteDetector(DetectorAnomalia):
                 and leitura.velocidade > limiares["curva_velocidade_min"]
             ):
                 eventos.append(self._evento(
-                    leitura, fg, inst, "Curva em alta velocidade",
+                    leitura, "accel_y", leitura.accel_y, fg, inst,
+                    "Curva em alta velocidade",
                     f"Aceleração lateral de {leitura.accel_y:.2f} m/s² a "
                     f"{leitura.velocidade:.0f} km/h.",
                 ))
@@ -59,7 +63,8 @@ class LimiteDetector(DetectorAnomalia):
             # Excesso de velocidade.
             if leitura.velocidade is not None and leitura.velocidade > limiares["velocidade_max"]:
                 eventos.append(self._evento(
-                    leitura, fg, inst, "Excesso de velocidade",
+                    leitura, "velocidade", leitura.velocidade, fg, inst,
+                    "Excesso de velocidade",
                     f"Velocidade de {leitura.velocidade:.0f} km/h "
                     f"(limite: {limiares['velocidade_max']:.0f} km/h).",
                 ))
@@ -67,7 +72,8 @@ class LimiteDetector(DetectorAnomalia):
             # RPM excessivo: motor forçado.
             if leitura.rpm is not None and leitura.rpm > limiares["rpm_max"]:
                 eventos.append(self._evento(
-                    leitura, fg, inst, "RPM excessivo",
+                    leitura, "rpm", leitura.rpm, fg, inst,
+                    "RPM excessivo",
                     f"Rotação de {leitura.rpm:.0f} RPM "
                     f"(limite: {limiares['rpm_max']:.0f} RPM).",
                 ))
@@ -75,15 +81,19 @@ class LimiteDetector(DetectorAnomalia):
             # Acelerador brusco: pisada rápida no acelerador.
             if var_acelerador > limiares["acelerador_delta_max"]:
                 eventos.append(self._evento(
-                    leitura, fg, inst, "Acelerador brusco",
+                    leitura, "posicao_acelerador", leitura.posicao_acelerador,
+                    fg, inst, "Acelerador brusco",
                     f"Variação de {var_acelerador:.1f} %/s na posição do acelerador.",
                 ))
 
         return eventos
 
-    def _evento(self, leitura, forca_g, instabilidade, classificacao, descricao):
+    def _evento(self, leitura, canal, valor, forca_g, instabilidade,
+                classificacao, descricao):
         return {
             "leitura": leitura,
+            "canal": canal,
+            "valor": valor,
             "forca_g": forca_g,
             "instabilidade": instabilidade,
             "classificacao": classificacao,

@@ -1,18 +1,17 @@
-"""Telas da interface gráfica (centrada no usuário).
+"""Telas da interface gráfica (Tkinter).
 
-Abas:
-  - RotaTab: lista as rotas, cadastra via CSV, renomeia e exclui.
-  - DashboardTab: resumo + score de segurança da rota + exportação CSV.
-  - EventosTab: lista detalhada dos eventos de risco, com filtro por tipo.
-  - GraficoTab: gráfico em painel (velocidade, Força G e RPM) com trechos de risco.
-  - MapaTab: trajeto no mapa (GPS) com os trechos de risco.
-  - CompararTab: compara o resumo de duas rotas.
-  - ConfiguracaoTab: ajusta os limiares de detecção de risco.
+Organização:
+  - Dados: Rotas, Leituras e Eventos de Risco, com CRUD completo.
+  - Visão Geral: resumo + score de segurança da rota + exportação CSV.
+  - Gráfico: velocidade, Força G e RPM, com limiares do JSON e tooltip.
+  - Mapa: trajeto GPS com os trechos de risco.
+  - Comparar: compara o resumo de duas rotas.
 """
 import csv
 import os
 import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog, ttk
+from datetime import datetime
+from tkinter import filedialog, messagebox, ttk
 
 import requests
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -21,6 +20,10 @@ from matplotlib.figure import Figure
 from api_client import extract_error
 
 BG = "#f5f6fa"
+CARD = "white"
+TEXTO = "#2d3436"
+CINZA = "#636e72"
+BORDA = "#dfe6e9"
 
 TIPOS_RISCO = [
     "Frenagem brusca",
@@ -42,21 +45,14 @@ CORES_TIPO = {
     "Comportamento atípico": "#636e72",
 }
 
-ORDEM_SEVERIDADE = TIPOS_RISCO
-
-# Metadados dos limiares (chave -> rótulo) para a aba de Configurações.
-LIMIARES_INFO = [
-    ("velocidade_max", "Velocidade máxima (km/h)"),
-    ("rpm_max", "RPM máximo (RPM)"),
-    ("aceleracao_max", "Aceleração máxima (m/s²)"),
-    ("frenagem_max", "Frenagem máxima (m/s²)"),
-    ("lateral_max", "Aceleração lateral (m/s²)"),
-    ("curva_velocidade_min", "Velocidade mínima p/ curva (km/h)"),
-    ("acelerador_delta_max", "Variação do acelerador (%/s)"),
-]
+METODOS = ["LIMITE", "ESTATISTICO", "MODELO_ML"]
+CANAIS_ESPECIAIS = ["geral", "forca_g", "multivariado"]
 
 
-def _botao(parent, texto, cor, comando, width=20):
+# =========================================================================
+# Funções auxiliares
+# =========================================================================
+def _botao(parent, texto, cor, comando, width=18):
     return tk.Button(
         parent, text=texto, command=comando, font=("Segoe UI", 10, "bold"),
         bg=cor, fg="white", activebackground=cor, activeforeground="white",
@@ -64,18 +60,21 @@ def _botao(parent, texto, cor, comando, width=20):
     )
 
 
-def _titulo(parent, texto):
-    return tk.Label(parent, text=texto, font=("Segoe UI", 20, "bold"),
-                    bg=BG, fg="#2d3436").pack(pady=(15, 8))
+def _titulo(parent, texto, subtitulo=None):
+    tk.Label(parent, text=texto, font=("Segoe UI", 19, "bold"),
+             bg=BG, fg=TEXTO).pack(anchor="w", padx=20, pady=(14, 2))
+    if subtitulo:
+        tk.Label(parent, text=subtitulo, font=("Segoe UI", 10),
+                 bg=BG, fg=CINZA).pack(anchor="w", padx=20, pady=(0, 8))
 
 
 def tipo_principal(classificacoes):
     """Escolhe o tipo mais severo para colorir um ponto com vários eventos."""
     if not classificacoes:
         return None
-    for t in ORDEM_SEVERIDADE:
-        if t in classificacoes:
-            return t
+    for tipo in TIPOS_RISCO:
+        if tipo in classificacoes:
+            return tipo
     return classificacoes[0]
 
 
@@ -88,7 +87,7 @@ def cor_score(score):
 
 
 def formatar_duracao(segundos):
-    s = int(segundos)
+    s = int(segundos or 0)
     h, resto = divmod(s, 3600)
     m, s = divmod(resto, 60)
     if h:
@@ -98,140 +97,699 @@ def formatar_duracao(segundos):
     return f"{s}s"
 
 
-def _so_hora(data_hora):
+def _para_iso(texto):
+    """Converte o texto digitado para o formato ISO aceito pela API."""
+    texto = (texto or "").strip()
+    for formato in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%d/%m/%Y %H:%M:%S"):
+        try:
+            return datetime.strptime(texto, formato).isoformat()
+        except ValueError:
+            continue
+    raise ValueError("Use o formato AAAA-MM-DD HH:MM:SS.")
+
+
+def _para_exibicao(data_hora):
     if not data_hora:
         return ""
-    if "T" in data_hora:
-        return data_hora.split("T")[1].split("+")[0].split(".")[0]
-    return data_hora
+    return data_hora.replace("T", " ").split(".")[0].split("+")[0]
+
+
+def _so_hora(data_hora):
+    texto = _para_exibicao(data_hora)
+    return texto.split(" ")[1] if " " in texto else texto
+
+
+def _rotulo_rota(rota):
+    return f"#{rota['id']} — {rota['nome']}"
+
+
+def _fmt_num(valor, casas=1):
+    if valor is None:
+        return ""
+    return f"{valor:.{casas}f}"
+
+
+def _erro_api(resp):
+    messagebox.showerror("Erro", extract_error(resp))
+
+
+def _erro_conexao(erro):
+    messagebox.showerror("Erro", f"Erro de comunicação com a API:\n{erro}")
 
 
 # =========================================================================
-# RotaTab
+# Formulário genérico (usado pelo CRUD das três tabelas)
+# =========================================================================
+class FormDialog(tk.Toplevel):
+    """Janela modal com campos validados.
+
+    Cada campo é um dict:
+      chave, rotulo, tipo ("texto", "numero", "combo", "datahora"),
+      obrigatorio (bool), valores (lista de (rótulo, valor) para combo).
+    """
+
+    def __init__(self, master, titulo, campos, valores=None):
+        super().__init__(master)
+        self.title(titulo)
+        self.configure(bg=BG)
+        self.resizable(False, False)
+        self.transient(master.winfo_toplevel())
+        self.resultado = None
+        self.campos = campos
+        self.valores = valores or {}
+        self.widgets = {}
+        self._build()
+        self.grab_set()
+        self.wait_window(self)
+
+    def _build(self):
+        tk.Label(self, text=self.title(), font=("Segoe UI", 14, "bold"),
+                 bg=BG, fg=TEXTO).pack(pady=(14, 8))
+
+        form = tk.Frame(self, bg=BG)
+        form.pack(padx=20, pady=5, fill="x")
+
+        for linha, campo in enumerate(self.campos):
+            chave = campo["chave"]
+            tk.Label(form, text=campo["rotulo"], bg=BG, fg=TEXTO,
+                     font=("Segoe UI", 10, "bold")).grid(
+                row=linha, column=0, sticky="w", pady=5, padx=(0, 8))
+
+            tipo = campo.get("tipo", "texto")
+            if tipo == "combo":
+                widget = ttk.Combobox(form, state="readonly", width=38)
+                opcoes = campo.get("valores", [])
+                widget["values"] = [rotulo for rotulo, _ in opcoes]
+                atual = self.valores.get(chave)
+                for rotulo, valor in opcoes:
+                    if valor == atual:
+                        widget.set(rotulo)
+                        break
+                else:
+                    if opcoes and campo.get("obrigatorio"):
+                        widget.current(0)
+            else:
+                widget = tk.Entry(form, width=40, font=("Segoe UI", 10))
+                atual = self.valores.get(chave)
+                if atual is not None:
+                    if tipo == "datahora":
+                        atual = _para_exibicao(atual)
+                    widget.insert(0, str(atual))
+            widget.grid(row=linha, column=1, sticky="ew", pady=5)
+            self.widgets[chave] = widget
+
+        botoes = tk.Frame(self, bg=BG)
+        botoes.pack(pady=14)
+        _botao(botoes, "Salvar", "#00b894", self._salvar, width=12).pack(side="left", padx=5)
+        _botao(botoes, "Cancelar", CINZA, self.destroy, width=12).pack(side="left", padx=5)
+
+    def _salvar(self):
+        dados = {}
+        for campo in self.campos:
+            chave = campo["chave"]
+            tipo = campo.get("tipo", "texto")
+            widget = self.widgets[chave]
+
+            if tipo == "combo":
+                rotulo = widget.get()
+                mapa = dict(campo.get("valores", []))
+                valor = mapa.get(rotulo)
+            else:
+                valor = widget.get().strip()
+
+            if campo.get("obrigatorio") and (valor is None or valor == ""):
+                messagebox.showwarning("Aviso", f"Preencha o campo '{campo['rotulo']}'.")
+                return
+
+            if valor in ("", None):
+                dados[chave] = None
+                continue
+
+            try:
+                if tipo == "numero":
+                    dados[chave] = float(str(valor).replace(",", "."))
+                elif tipo == "datahora":
+                    dados[chave] = _para_iso(str(valor))
+                else:
+                    dados[chave] = valor
+            except ValueError as erro:
+                messagebox.showerror("Erro", f"Valor inválido em '{campo['rotulo']}':\n{erro}")
+                return
+
+        self.resultado = dados
+        self.destroy()
+
+
+# =========================================================================
+# Dados → Rotas
 # =========================================================================
 class RotaTab(tk.Frame):
 
     def __init__(self, master, app):
         super().__init__(master, bg=BG)
         self.app = app
+        self.rotas = []
         self.tree = None
         self._build()
 
     def _build(self):
-        _titulo(self, "Minhas Rotas")
+        _titulo(self, "Rotas", "Cada rota representa uma viagem monitorada.")
 
-        btns = tk.Frame(self, bg=BG)
-        btns.pack(pady=6)
-        _botao(btns, "Cadastrar Rota (CSV)", "#0984e3", self.cadastrar_rota).pack(side="left", padx=4)
-        _botao(btns, "Renomear", "#e17055", self.renomear, width=14).pack(side="left", padx=4)
-        _botao(btns, "Excluir", "#d63031", self.excluir, width=14).pack(side="left", padx=4)
+        botoes = tk.Frame(self, bg=BG)
+        botoes.pack(anchor="w", padx=20, pady=6)
+        _botao(botoes, "Nova Rota", "#0984e3", self.nova).pack(side="left", padx=(0, 5))
+        _botao(botoes, "Importar CSV", "#6c5ce7", self.importar).pack(side="left", padx=5)
+        _botao(botoes, "Editar", "#e17055", self.editar).pack(side="left", padx=5)
+        _botao(botoes, "Excluir", "#d63031", self.excluir).pack(side="left", padx=5)
+        _botao(botoes, "Atualizar", CINZA, self.atualizar, width=12).pack(side="left", padx=5)
 
         frame = tk.Frame(self, bg=BG)
         frame.pack(fill="both", expand=True, padx=20, pady=(5, 15))
-        cols = ["id", "nome", "arquivo", "data"]
+        cols = ("id", "nome", "arquivo", "data")
         self.tree = ttk.Treeview(frame, columns=cols, show="headings", height=14)
-        for key, label, width in [
-            ("id", "ID", 50), ("nome", "Nome", 200),
-            ("arquivo", "Arquivo de origem", 300), ("data", "Data", 120),
+        for chave, rotulo, largura, ancora in [
+            ("id", "ID", 50, "center"),
+            ("nome", "Nome", 260, "w"),
+            ("arquivo", "Arquivo de origem", 300, "w"),
+            ("data", "Data de importação", 150, "center"),
         ]:
-            self.tree.heading(key, text=label)
-            self.tree.column(key, width=width, anchor="center")
+            self.tree.heading(chave, text=rotulo)
+            self.tree.column(chave, width=largura, anchor=ancora)
         vsb = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=vsb.set)
         self.tree.pack(side="left", fill="both", expand=True)
         vsb.pack(side="right", fill="y")
-        self.tree.bind("<<TreeviewSelect>>", self._on_select)
+        self.tree.bind("<<TreeviewSelect>>", self._selecionar)
 
-    def _on_select(self, _event):
-        sel = self.tree.selection()
-        if sel:
-            self.app.rota_atual_id = int(self.tree.item(sel[0])["values"][0])
+    def _selecionar(self, _event):
+        rota_id = self._get_selecionada(silencioso=True)
+        if rota_id is not None:
+            self.app.definir_rota(rota_id)
 
-    def _get_selecionada(self):
-        sel = self.tree.selection()
-        if not sel:
-            messagebox.showwarning("Aviso", "Selecione uma rota na lista.")
+    def _get_selecionada(self, silencioso=False):
+        selecao = self.tree.selection()
+        if not selecao:
+            if not silencioso:
+                messagebox.showwarning("Aviso", "Selecione uma rota na lista.")
             return None
-        return int(self.tree.item(sel[0])["values"][0])
+        return int(self.tree.item(selecao[0])["values"][0])
 
     def atualizar(self):
         try:
             resp = self.app.api.list_rotas()
         except requests.exceptions.RequestException:
             return
-        for i in self.tree.get_children():
-            self.tree.delete(i)
         if resp.status_code != 200:
             return
-        for r in resp.json():
-            data = (r.get("data_importacao") or "").split("T")[0]
+        self.rotas = resp.json()
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        for rota in self.rotas:
             self.tree.insert("", "end", values=(
-                r["id"], r["nome"], r.get("arquivo_origem") or "", data,
+                rota["id"], rota["nome"], rota.get("arquivo_origem") or "",
+                _para_exibicao(rota.get("data_importacao")),
             ))
 
-    def cadastrar_rota(self):
+    def nova(self):
+        dialogo = FormDialog(self, "Nova rota", [
+            {"chave": "nome", "rotulo": "Nome da rota", "tipo": "texto", "obrigatorio": True},
+            {"chave": "arquivo_origem", "rotulo": "Arquivo de origem", "tipo": "texto"},
+        ])
+        if dialogo.resultado is None:
+            return
+        try:
+            resp = self.app.api.criar_rota(**dialogo.resultado)
+        except requests.exceptions.RequestException as erro:
+            _erro_conexao(erro)
+            return
+        if resp.status_code in (200, 201):
+            self.app.recarregar_rotas(selecionar=resp.json().get("id"))
+        else:
+            _erro_api(resp)
+
+    def importar(self):
         caminho = filedialog.askopenfilename(
             title="Selecionar arquivo de telemetria", filetypes=[("CSV", "*.csv")],
         )
         if not caminho:
             return
-        nome = simpledialog.askstring("Nome da rota", "Dê um nome para a rota:")
-        if not nome:
+        dialogo = FormDialog(self, "Importar CSV", [
+            {"chave": "nome", "rotulo": "Nome da rota", "tipo": "texto", "obrigatorio": True},
+        ], valores={"nome": os.path.splitext(os.path.basename(caminho))[0]})
+        if dialogo.resultado is None:
             return
         try:
-            with open(caminho, encoding="utf-8-sig", errors="replace") as fh:
-                conteudo = fh.read()
-        except OSError as e:
-            messagebox.showerror("Erro", f"Não foi possível ler o arquivo:\n{e}")
+            with open(caminho, encoding="utf-8-sig", errors="replace") as arquivo:
+                conteudo = arquivo.read()
+        except OSError as erro:
+            messagebox.showerror("Erro", f"Não foi possível ler o arquivo:\n{erro}")
             return
         try:
-            resp = self.app.api.importar_csv(nome, os.path.basename(caminho), conteudo)
-        except requests.exceptions.RequestException as e:
-            messagebox.showerror("Erro", f"Erro de comunicação com a API:\n{e}")
+            resp = self.app.api.importar_csv(
+                dialogo.resultado["nome"], os.path.basename(caminho), conteudo
+            )
+        except requests.exceptions.RequestException as erro:
+            _erro_conexao(erro)
             return
         if resp.status_code in (200, 201):
             dados = resp.json()
-            self.app.rota_atual_id = dados["rota_id"]
-            self.atualizar()
-            self.app.refresh_detalhes()
+            limpeza = dados.get("limpeza", {})
+            messagebox.showinfo(
+                "Importação concluída",
+                f"{dados.get('total_leituras', 0)} leituras importadas.\n"
+                f"Leituras descartadas: {limpeza.get('total_removido', 0)}\n"
+                f"Spikes ajustados: {limpeza.get('acelerometro_ajustado', 0)}",
+            )
+            self.app.recarregar_rotas(selecionar=dados.get("rota_id"))
         else:
-            messagebox.showerror("Erro", extract_error(resp))
+            _erro_api(resp)
 
-    def renomear(self):
+    def editar(self):
         rota_id = self._get_selecionada()
         if rota_id is None:
             return
-        nome = simpledialog.askstring("Renomear", "Novo nome da rota:")
-        if not nome:
+        rota = next((r for r in self.rotas if r["id"] == rota_id), None)
+        if rota is None:
             return
-        resp = self.app.api.renomear_rota(rota_id, nome)
+        dialogo = FormDialog(self, "Editar rota", [
+            {"chave": "nome", "rotulo": "Nome da rota", "tipo": "texto", "obrigatorio": True},
+            {"chave": "arquivo_origem", "rotulo": "Arquivo de origem", "tipo": "texto"},
+        ], valores=rota)
+        if dialogo.resultado is None:
+            return
+        try:
+            resp = self.app.api.atualizar_rota(rota_id, **dialogo.resultado)
+        except requests.exceptions.RequestException as erro:
+            _erro_conexao(erro)
+            return
         if resp.status_code == 200:
-            self.atualizar()
+            self.app.recarregar_rotas(selecionar=rota_id)
         else:
-            messagebox.showerror("Erro", extract_error(resp))
+            _erro_api(resp)
 
     def excluir(self):
         rota_id = self._get_selecionada()
         if rota_id is None:
             return
-        if not messagebox.askyesno("Confirmar", "Excluir a rota selecionada?"):
+        if not messagebox.askyesno(
+            "Confirmar",
+            "Excluir a rota selecionada?\nAs leituras e os eventos vinculados também serão excluídos.",
+        ):
             return
         try:
             resp = self.app.api.excluir_rota(rota_id)
-        except requests.exceptions.RequestException as e:
-            messagebox.showerror("Erro", f"Erro de comunicação com a API:\n{e}")
+        except requests.exceptions.RequestException as erro:
+            _erro_conexao(erro)
             return
         if resp.status_code == 200:
-            self.atualizar()
-            if self.app.rota_atual_id == rota_id:
-                self.app.rota_atual_id = None
-                self.app.refresh_detalhes()
+            self.app.recarregar_rotas()
         else:
-            messagebox.showerror("Erro", extract_error(resp))
+            _erro_api(resp)
 
 
 # =========================================================================
-# DashboardTab
+# Dados → Leituras
+# =========================================================================
+class LeituraTab(tk.Frame):
+
+    CAMPOS_NUMEROS = [
+        ("velocidade", "Velocidade (km/h)"),
+        ("rpm", "RPM"),
+        ("accel_x", "Aceleração X (m/s²)"),
+        ("accel_y", "Aceleração Y (m/s²)"),
+        ("accel_z", "Aceleração Z (m/s²)"),
+        ("posicao_acelerador", "Posição do acelerador (%)"),
+        ("latitude", "Latitude"),
+        ("longitude", "Longitude"),
+    ]
+
+    def __init__(self, master, app):
+        super().__init__(master, bg=BG)
+        self.app = app
+        self.leituras = []
+        self.tree = None
+        self._build()
+
+    def _build(self):
+        _titulo(self, "Leituras", "Frames de telemetria: valores dos sensores em um instante.")
+
+        filtro = tk.Frame(self, bg=BG)
+        filtro.pack(anchor="w", padx=20, pady=4)
+        tk.Label(filtro, text="Rota:", bg=BG, fg=TEXTO,
+                 font=("Segoe UI", 10, "bold")).pack(side="left", padx=(0, 4))
+        self.combo_rota = ttk.Combobox(filtro, state="readonly", width=32)
+        self.combo_rota.pack(side="left", padx=(0, 10))
+        self.combo_rota.bind("<<ComboboxSelected>>", lambda _e: self.atualizar())
+
+        botoes = tk.Frame(self, bg=BG)
+        botoes.pack(anchor="w", padx=20, pady=4)
+        _botao(botoes, "Nova Leitura", "#0984e3", self.nova).pack(side="left", padx=(0, 5))
+        _botao(botoes, "Editar", "#e17055", self.editar).pack(side="left", padx=5)
+        _botao(botoes, "Excluir", "#d63031", self.excluir).pack(side="left", padx=5)
+        _botao(botoes, "Atualizar", CINZA, self.atualizar, width=12).pack(side="left", padx=5)
+
+        frame = tk.Frame(self, bg=BG)
+        frame.pack(fill="both", expand=True, padx=20, pady=(5, 15))
+        cols = ("id", "rota", "data", "vel", "rpm", "ax", "ay", "az", "acel", "lat", "lon")
+        self.tree = ttk.Treeview(frame, columns=cols, show="headings", height=13)
+        for chave, rotulo, largura in [
+            ("id", "ID", 45), ("rota", "Rota", 60), ("data", "Data/hora", 140),
+            ("vel", "Veloc.", 60), ("rpm", "RPM", 65), ("ax", "Accel X", 65),
+            ("ay", "Accel Y", 65), ("az", "Accel Z", 65), ("acel", "Acelerador", 75),
+            ("lat", "Latitude", 85), ("lon", "Longitude", 85),
+        ]:
+            self.tree.heading(chave, text=rotulo)
+            self.tree.column(chave, width=largura, anchor="center")
+        vsb = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=vsb.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        vsb.pack(side="right", fill="y")
+
+    def _rota_filtro(self):
+        indice = self.combo_rota.current()
+        if indice <= 0:
+            return None
+        return self.app.rotas[indice - 1]["id"]
+
+    def atualizar(self):
+        nomes = ["Todas"] + [_rotulo_rota(r) for r in self.app.rotas]
+        self.combo_rota["values"] = nomes
+        if self.combo_rota.current() < 0:
+            self.combo_rota.current(0)
+
+        try:
+            resp = self.app.api.list_leituras(self._rota_filtro())
+        except requests.exceptions.RequestException:
+            return
+        if resp.status_code != 200:
+            return
+        self.leituras = resp.json()
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        for leitura in self.leituras:
+            self.tree.insert("", "end", values=(
+                leitura["id"], leitura["rota_id"],
+                _para_exibicao(leitura.get("data_hora")),
+                _fmt_num(leitura.get("velocidade")), _fmt_num(leitura.get("rpm"), 0),
+                _fmt_num(leitura.get("accel_x"), 2), _fmt_num(leitura.get("accel_y"), 2),
+                _fmt_num(leitura.get("accel_z"), 2), _fmt_num(leitura.get("posicao_acelerador")),
+                _fmt_num(leitura.get("latitude"), 6), _fmt_num(leitura.get("longitude"), 6),
+            ))
+
+    def _get_selecionada(self):
+        selecao = self.tree.selection()
+        if not selecao:
+            messagebox.showwarning("Aviso", "Selecione uma leitura na lista.")
+            return None
+        return int(self.tree.item(selecao[0])["values"][0])
+
+    def _campos(self):
+        opcoes_rota = [(_rotulo_rota(r), r["id"]) for r in self.app.rotas]
+        campos = [
+            {"chave": "rota_id", "rotulo": "Rota", "tipo": "combo",
+             "valores": opcoes_rota, "obrigatorio": True},
+            {"chave": "data_hora", "rotulo": "Data/hora (AAAA-MM-DD HH:MM:SS)",
+             "tipo": "datahora", "obrigatorio": True},
+        ]
+        for chave, rotulo in self.CAMPOS_NUMEROS:
+            campos.append({"chave": chave, "rotulo": rotulo, "tipo": "numero"})
+        return campos
+
+    def nova(self):
+        if not self.app.rotas:
+            messagebox.showwarning("Aviso", "Cadastre uma rota antes de criar leituras.")
+            return
+        dialogo = FormDialog(self, "Nova leitura", self._campos())
+        if dialogo.resultado is None:
+            return
+        try:
+            resp = self.app.api.criar_leitura(dialogo.resultado)
+        except requests.exceptions.RequestException as erro:
+            _erro_conexao(erro)
+            return
+        if resp.status_code in (200, 201):
+            self.atualizar()
+            self.app.refresh_detalhes()
+        else:
+            _erro_api(resp)
+
+    def editar(self):
+        leitura_id = self._get_selecionada()
+        if leitura_id is None:
+            return
+        leitura = next((l for l in self.leituras if l["id"] == leitura_id), None)
+        if leitura is None:
+            return
+        dialogo = FormDialog(self, "Editar leitura", self._campos(), valores=leitura)
+        if dialogo.resultado is None:
+            return
+        try:
+            resp = self.app.api.atualizar_leitura(leitura_id, dialogo.resultado)
+        except requests.exceptions.RequestException as erro:
+            _erro_conexao(erro)
+            return
+        if resp.status_code == 200:
+            self.atualizar()
+            self.app.refresh_detalhes()
+        else:
+            _erro_api(resp)
+
+    def excluir(self):
+        leitura_id = self._get_selecionada()
+        if leitura_id is None:
+            return
+        if not messagebox.askyesno(
+            "Confirmar",
+            "Excluir a leitura selecionada?\nOs eventos vinculados a ela também serão excluídos.",
+        ):
+            return
+        try:
+            resp = self.app.api.excluir_leitura(leitura_id)
+        except requests.exceptions.RequestException as erro:
+            _erro_conexao(erro)
+            return
+        if resp.status_code == 200:
+            self.atualizar()
+            self.app.refresh_detalhes()
+        else:
+            _erro_api(resp)
+
+
+# =========================================================================
+# Dados → Eventos de risco
+# =========================================================================
+class EventoRiscoTab(tk.Frame):
+
+    def __init__(self, master, app):
+        super().__init__(master, bg=BG)
+        self.app = app
+        self.eventos = []
+        self.leituras = []
+        self.sensores = []
+        self.tree = None
+        self._build()
+
+    def _build(self):
+        _titulo(self, "Eventos de Risco",
+                "Anomalias detectadas: canal, valor, método e classificação.")
+
+        filtro = tk.Frame(self, bg=BG)
+        filtro.pack(anchor="w", padx=20, pady=4)
+        tk.Label(filtro, text="Rota:", bg=BG, fg=TEXTO,
+                 font=("Segoe UI", 10, "bold")).pack(side="left", padx=(0, 4))
+        self.combo_rota = ttk.Combobox(filtro, state="readonly", width=30)
+        self.combo_rota.pack(side="left", padx=(0, 10))
+        self.combo_rota.bind("<<ComboboxSelected>>", lambda _e: self.atualizar())
+        tk.Label(filtro, text="Tipo:", bg=BG, fg=TEXTO,
+                 font=("Segoe UI", 10, "bold")).pack(side="left", padx=(0, 4))
+        self.combo_tipo = ttk.Combobox(filtro, state="readonly", width=26,
+                                       values=["Todos"] + TIPOS_RISCO)
+        self.combo_tipo.current(0)
+        self.combo_tipo.pack(side="left")
+        self.combo_tipo.bind("<<ComboboxSelected>>", lambda _e: self.atualizar())
+
+        botoes = tk.Frame(self, bg=BG)
+        botoes.pack(anchor="w", padx=20, pady=4)
+        _botao(botoes, "Novo Evento", "#0984e3", self.novo).pack(side="left", padx=(0, 5))
+        _botao(botoes, "Editar", "#e17055", self.editar).pack(side="left", padx=5)
+        _botao(botoes, "Excluir", "#d63031", self.excluir).pack(side="left", padx=5)
+        _botao(botoes, "Atualizar", CINZA, self.atualizar, width=12).pack(side="left", padx=5)
+
+        frame = tk.Frame(self, bg=BG)
+        frame.pack(fill="both", expand=True, padx=20, pady=(5, 15))
+        cols = ("id", "leitura", "rota", "data", "tipo", "metodo", "canal", "valor", "fg", "inst")
+        self.tree = ttk.Treeview(frame, columns=cols, show="headings", height=12)
+        for chave, rotulo, largura in [
+            ("id", "ID", 45), ("leitura", "Leitura", 60), ("rota", "Rota", 55),
+            ("data", "Data/hora", 140), ("tipo", "Classificação", 180),
+            ("metodo", "Método", 105), ("canal", "Canal", 110), ("valor", "Valor", 70),
+            ("fg", "Força G", 70), ("inst", "Instab.", 70),
+        ]:
+            self.tree.heading(chave, text=rotulo)
+            self.tree.column(chave, width=largura, anchor="center")
+        vsb = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=vsb.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        vsb.pack(side="right", fill="y")
+
+    def _rota_filtro(self):
+        indice = self.combo_rota.current()
+        if indice <= 0:
+            return None
+        return self.app.rotas[indice - 1]["id"]
+
+    def atualizar(self):
+        nomes = ["Todas"] + [_rotulo_rota(r) for r in self.app.rotas]
+        self.combo_rota["values"] = nomes
+        if self.combo_rota.current() < 0:
+            self.combo_rota.current(0)
+
+        tipo = self.combo_tipo.get()
+        if tipo == "Todos":
+            tipo = None
+
+        try:
+            resp = self.app.api.list_eventos(self._rota_filtro(), tipo)
+            resp_leituras = self.app.api.list_leituras()
+            resp_sensores = self.app.api.get_sensores()
+        except requests.exceptions.RequestException:
+            return
+        if resp.status_code != 200:
+            return
+        self.eventos = resp.json()
+        if resp_leituras.status_code == 200:
+            self.leituras = resp_leituras.json()
+        if resp_sensores.status_code == 200:
+            self.sensores = list(resp_sensores.json().keys())
+
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        for evento in self.eventos:
+            self.tree.insert("", "end", values=(
+                evento["id"], evento["leitura_id"], evento["rota_id"],
+                _para_exibicao(evento.get("data_hora")),
+                evento.get("classificacao"), evento.get("metodo"),
+                evento.get("canal"), _fmt_num(evento.get("valor"), 2),
+                _fmt_num(evento.get("forca_g"), 2),
+                _fmt_num(evento.get("instabilidade"), 2),
+            ))
+
+    def _get_selecionada(self):
+        selecao = self.tree.selection()
+        if not selecao:
+            messagebox.showwarning("Aviso", "Selecione um evento na lista.")
+            return None
+        return int(self.tree.item(selecao[0])["values"][0])
+
+    def _campos(self):
+        opcoes_leitura = [
+            (f"#{l['id']} — rota {l['rota_id']} — {_para_exibicao(l['data_hora'])}", l["id"])
+            for l in self.leituras
+        ]
+        canais = self.sensores + [c for c in CANAIS_ESPECIAIS if c not in self.sensores]
+        return [
+            {"chave": "leitura_id", "rotulo": "Leitura", "tipo": "combo",
+             "valores": opcoes_leitura, "obrigatorio": True},
+            {"chave": "metodo", "rotulo": "Método", "tipo": "combo",
+             "valores": [(m, m) for m in METODOS], "obrigatorio": True},
+            {"chave": "canal", "rotulo": "Canal (sensor)", "tipo": "combo",
+             "valores": [(c, c) for c in canais], "obrigatorio": True},
+            {"chave": "classificacao", "rotulo": "Classificação", "tipo": "combo",
+             "valores": [(t, t) for t in TIPOS_RISCO], "obrigatorio": True},
+            {"chave": "valor", "rotulo": "Valor medido", "tipo": "numero"},
+            {"chave": "forca_g", "rotulo": "Força G (m/s²)", "tipo": "numero"},
+            {"chave": "instabilidade", "rotulo": "Instabilidade", "tipo": "numero"},
+            {"chave": "descricao", "rotulo": "Descrição", "tipo": "texto"},
+        ]
+
+    def novo(self):
+        if not self.leituras:
+            messagebox.showwarning("Aviso", "Cadastre uma leitura antes de criar eventos.")
+            return
+        dialogo = FormDialog(self, "Novo evento de risco", self._campos())
+        if dialogo.resultado is None:
+            return
+        try:
+            resp = self.app.api.criar_evento(dialogo.resultado)
+        except requests.exceptions.RequestException as erro:
+            _erro_conexao(erro)
+            return
+        if resp.status_code in (200, 201):
+            self.atualizar()
+            self.app.refresh_detalhes()
+        else:
+            _erro_api(resp)
+
+    def editar(self):
+        evento_id = self._get_selecionada()
+        if evento_id is None:
+            return
+        evento = next((e for e in self.eventos if e["id"] == evento_id), None)
+        if evento is None:
+            return
+        dialogo = FormDialog(self, "Editar evento de risco", self._campos(), valores=evento)
+        if dialogo.resultado is None:
+            return
+        try:
+            resp = self.app.api.atualizar_evento(evento_id, dialogo.resultado)
+        except requests.exceptions.RequestException as erro:
+            _erro_conexao(erro)
+            return
+        if resp.status_code == 200:
+            self.atualizar()
+            self.app.refresh_detalhes()
+        else:
+            _erro_api(resp)
+
+    def excluir(self):
+        evento_id = self._get_selecionada()
+        if evento_id is None:
+            return
+        if not messagebox.askyesno("Confirmar", "Excluir o evento selecionado?"):
+            return
+        try:
+            resp = self.app.api.excluir_evento(evento_id)
+        except requests.exceptions.RequestException as erro:
+            _erro_conexao(erro)
+            return
+        if resp.status_code == 200:
+            self.atualizar()
+            self.app.refresh_detalhes()
+        else:
+            _erro_api(resp)
+
+
+# =========================================================================
+# Seção Dados (notebook com as três tabelas)
+# =========================================================================
+class DadosTab(tk.Frame):
+
+    def __init__(self, master, app):
+        super().__init__(master, bg=BG)
+        self.app = app
+        self.notebook = ttk.Notebook(self)
+        self.notebook.pack(fill="both", expand=True, padx=5, pady=5)
+
+        self.rota_tab = RotaTab(self.notebook, app)
+        self.leitura_tab = LeituraTab(self.notebook, app)
+        self.evento_tab = EventoRiscoTab(self.notebook, app)
+
+        self.notebook.add(self.rota_tab, text="Rotas")
+        self.notebook.add(self.leitura_tab, text="Leituras")
+        self.notebook.add(self.evento_tab, text="Eventos")
+        self.notebook.bind("<<NotebookTabChanged>>", self._trocar)
+
+    def _trocar(self, _event):
+        indice = self.notebook.index(self.notebook.select())
+        [self.rota_tab, self.leitura_tab, self.evento_tab][indice].atualizar()
+
+    def atualizar(self):
+        indice = self.notebook.index(self.notebook.select())
+        [self.rota_tab, self.leitura_tab, self.evento_tab][indice].atualizar()
+
+
+# =========================================================================
+# Visão Geral (dashboard + score + exportação)
 # =========================================================================
 class DashboardTab(tk.Frame):
 
@@ -241,27 +799,23 @@ class DashboardTab(tk.Frame):
         self.resumo = None
         self.eventos = []
         self.var_score = tk.StringVar(value="—")
-        self.var_det = tk.StringVar(value="—")
         self.vars = {}
         self._build()
 
     def _build(self):
-        _titulo(self, "Dashboard da Rota")
+        _titulo(self, "Visão Geral da Rota", "Resumo, score de segurança e relatório.")
 
         topo = tk.Frame(self, bg=BG)
         topo.pack(fill="x", padx=20, pady=5)
 
-        # Cartão do score
-        score_card = tk.Frame(topo, bg="white", highlightbackground="#dfe6e9",
-                              highlightthickness=1)
+        score_card = tk.Frame(topo, bg=CARD, highlightbackground=BORDA, highlightthickness=1)
         score_card.pack(side="left", padx=(0, 10))
         tk.Label(score_card, text="Score de segurança", font=("Segoe UI", 11, "bold"),
-                 bg="white", fg="#636e72").pack(padx=18, pady=(12, 0))
+                 bg=CARD, fg=CINZA).pack(padx=18, pady=(12, 0))
         self.lbl_score = tk.Label(score_card, textvariable=self.var_score,
-                                  font=("Segoe UI", 42, "bold"), bg="white", fg="#2d3436")
+                                  font=("Segoe UI", 42, "bold"), bg=CARD, fg=TEXTO)
         self.lbl_score.pack(padx=18, pady=(0, 12))
 
-        # Cartões de estatísticas
         self.cards = tk.Frame(topo, bg=BG)
         self.cards.pack(side="left", fill="both", expand=True)
         metricas = [
@@ -269,21 +823,19 @@ class DashboardTab(tk.Frame):
             ("vmedia", "Velocidade média"), ("vmax", "Velocidade máxima"),
             ("rpmax", "RPM máximo"), ("total", "Total de eventos"),
         ]
-        for i, (key, label) in enumerate(metricas):
+        for i, (chave, rotulo) in enumerate(metricas):
             var = tk.StringVar(value="—")
-            self.vars[key] = var
-            card = tk.Frame(self.cards, bg="white", highlightbackground="#dfe6e9",
+            self.vars[chave] = var
+            card = tk.Frame(self.cards, bg=CARD, highlightbackground=BORDA,
                             highlightthickness=1, width=120)
             card.grid(row=i // 3, column=i % 3, padx=5, pady=5, sticky="nsew")
-            tk.Label(card, text=label, font=("Segoe UI", 9), bg="white",
-                     fg="#636e72").pack(pady=(8, 0))
+            tk.Label(card, text=rotulo, font=("Segoe UI", 9), bg=CARD,
+                     fg=CINZA).pack(pady=(8, 0))
             tk.Label(card, textvariable=var, font=("Segoe UI", 15, "bold"),
-                     bg="white", fg="#2d3436").pack(pady=(0, 8))
+                     bg=CARD, fg=TEXTO).pack(pady=(0, 8))
 
-        # Eventos por tipo
-        lbl = tk.Label(self, text="Eventos por tipo", font=("Segoe UI", 13, "bold"),
-                       bg=BG, fg="#2d3436")
-        lbl.pack(anchor="w", padx=20, pady=(12, 4))
+        tk.Label(self, text="Eventos por tipo", font=("Segoe UI", 13, "bold"),
+                 bg=BG, fg=TEXTO).pack(anchor="w", padx=20, pady=(12, 4))
         self.tipos_frame = tk.Frame(self, bg=BG)
         self.tipos_frame.pack(fill="both", expand=True, padx=20)
 
@@ -298,10 +850,10 @@ class DashboardTab(tk.Frame):
         self.eventos = []
         if not rota_id:
             self.var_score.set("—")
-            self.lbl_score.configure(fg="#2d3436")
+            self.lbl_score.configure(fg=TEXTO)
             for var in self.vars.values():
                 var.set("—")
-            self._limpar_tipos()
+            self._limpar_tipos("Selecione uma rota na barra superior.")
             return
         try:
             self.app.api.analisar_rota(rota_id)
@@ -309,6 +861,7 @@ class DashboardTab(tk.Frame):
         except requests.exceptions.RequestException:
             return
         if resp.status_code != 200:
+            self._limpar_tipos(extract_error(resp))
             return
         resumo = resp.json()
         self.resumo = resumo
@@ -323,37 +876,34 @@ class DashboardTab(tk.Frame):
         self.vars["vmax"].set(f"{resumo.get('velocidade_maxima', 0):.1f} km/h")
         self.vars["rpmax"].set(f"{resumo.get('rpm_maximo', 0):.0f} RPM")
         self.vars["total"].set(str(resumo.get("total_eventos", 0)))
-
         self._exibir_tipos(resumo.get("eventos_por_tipo", {}))
 
         try:
-            r = self.app.api.list_eventos(rota_id)
-            if r.status_code == 200:
-                self.eventos = r.json()
+            resp_eventos = self.app.api.list_eventos(rota_id)
+            if resp_eventos.status_code == 200:
+                self.eventos = resp_eventos.json()
         except requests.exceptions.RequestException:
             pass
 
-    def _limpar_tipos(self):
-        for w in self.tipos_frame.winfo_children():
-            w.destroy()
-        tk.Label(self.tipos_frame, text="Nenhum evento registrado.",
-                 bg=BG, fg="#636e72").pack(anchor="w")
+    def _limpar_tipos(self, mensagem):
+        for widget in self.tipos_frame.winfo_children():
+            widget.destroy()
+        tk.Label(self.tipos_frame, text=mensagem, bg=BG, fg=CINZA).pack(anchor="w")
 
     def _exibir_tipos(self, eventos_por_tipo):
-        for w in self.tipos_frame.winfo_children():
-            w.destroy()
+        for widget in self.tipos_frame.winfo_children():
+            widget.destroy()
         if not eventos_por_tipo:
-            tk.Label(self.tipos_frame, text="Nenhum evento de risco detectado.",
-                     bg=BG, fg="#636e72").pack(anchor="w")
+            self._limpar_tipos("Nenhum evento de risco detectado.")
             return
-        for tipo, qtd in sorted(eventos_por_tipo.items(), key=lambda x: -x[1]):
+        for tipo, quantidade in sorted(eventos_por_tipo.items(), key=lambda x: -x[1]):
             linha = tk.Frame(self.tipos_frame, bg=BG)
             linha.pack(fill="x", pady=2)
-            cor = CORES_TIPO.get(tipo, "#636e72")
-            tk.Label(linha, text="●", fg=cor, bg=BG, font=("Segoe UI", 11)).pack(side="left")
-            tk.Label(linha, text=tipo, bg=BG, fg="#2d3436",
+            tk.Label(linha, text="●", fg=CORES_TIPO.get(tipo, CINZA),
+                     bg=BG, font=("Segoe UI", 11)).pack(side="left")
+            tk.Label(linha, text=tipo, bg=BG, fg=TEXTO,
                      font=("Segoe UI", 11)).pack(side="left", padx=6)
-            tk.Label(linha, text=str(qtd), bg=BG, fg="#2d3436",
+            tk.Label(linha, text=str(quantidade), bg=BG, fg=TEXTO,
                      font=("Segoe UI", 11, "bold")).pack(side="left")
 
     def exportar_relatorio(self):
@@ -368,128 +918,85 @@ class DashboardTab(tk.Frame):
             return
         resumo = self.resumo
         try:
-            with open(caminho, "w", newline="", encoding="utf-8-sig") as fh:
-                w = csv.writer(fh, delimiter=";")
-                w.writerow(["Relatório de Telemetria Veicular"])
-                w.writerow([])
-                w.writerow(["Rota", resumo.get("nome")])
-                w.writerow(["Score de segurança", resumo.get("score")])
-                w.writerow(["Duração (s)", resumo.get("duracao_segundos")])
-                w.writerow(["Distância (km)", resumo.get("distancia_km")])
-                w.writerow(["Velocidade média (km/h)", resumo.get("velocidade_media")])
-                w.writerow(["Velocidade máxima (km/h)", resumo.get("velocidade_maxima")])
-                w.writerow(["RPM máximo", resumo.get("rpm_maximo")])
-                w.writerow(["Total de eventos", resumo.get("total_eventos")])
-                w.writerow([])
-                w.writerow(["Eventos por tipo"])
-                for tipo, qtd in (resumo.get("eventos_por_tipo") or {}).items():
-                    w.writerow([tipo, qtd])
-                w.writerow([])
-                w.writerow(["Detalhe dos eventos"])
-                w.writerow(["Tipo", "Método", "Hora", "Força G", "Instabilidade", "Descrição"])
-                for e in self.eventos:
-                    w.writerow([
-                        e.get("classificacao"), e.get("metodo"), _so_hora(e.get("data_hora")),
-                        e.get("forca_g"), e.get("instabilidade"), e.get("descricao"),
+            with open(caminho, "w", newline="", encoding="utf-8-sig") as arquivo:
+                escritor = csv.writer(arquivo, delimiter=";")
+                escritor.writerow(["Relatório de Telemetria Veicular"])
+                escritor.writerow([])
+                escritor.writerow(["Rota", resumo.get("nome")])
+                escritor.writerow(["Score de segurança", resumo.get("score")])
+                escritor.writerow(["Duração (s)", resumo.get("duracao_segundos")])
+                escritor.writerow(["Distância (km)", resumo.get("distancia_km")])
+                escritor.writerow(["Velocidade média (km/h)", resumo.get("velocidade_media")])
+                escritor.writerow(["Velocidade máxima (km/h)", resumo.get("velocidade_maxima")])
+                escritor.writerow(["RPM máximo", resumo.get("rpm_maximo")])
+                escritor.writerow(["Total de eventos", resumo.get("total_eventos")])
+                escritor.writerow([])
+                escritor.writerow(["Eventos por tipo"])
+                for tipo, quantidade in (resumo.get("eventos_por_tipo") or {}).items():
+                    escritor.writerow([tipo, quantidade])
+                escritor.writerow([])
+                escritor.writerow(["Detalhe dos eventos"])
+                escritor.writerow([
+                    "Tipo", "Método", "Canal", "Valor", "Hora",
+                    "Força G", "Instabilidade", "Descrição",
+                ])
+                for evento in self.eventos:
+                    escritor.writerow([
+                        evento.get("classificacao"), evento.get("metodo"),
+                        evento.get("canal"), evento.get("valor"),
+                        _so_hora(evento.get("data_hora")),
+                        evento.get("forca_g"), evento.get("instabilidade"),
+                        evento.get("descricao"),
                     ])
-        except OSError as e:
-            messagebox.showerror("Erro", f"Não foi possível salvar o arquivo:\n{e}")
+        except OSError as erro:
+            messagebox.showerror("Erro", f"Não foi possível salvar o arquivo:\n{erro}")
             return
         messagebox.showinfo("Sucesso", f"Relatório salvo em:\n{caminho}")
 
 
 # =========================================================================
-# EventosTab
-# =========================================================================
-class EventosTab(tk.Frame):
-
-    def __init__(self, master, app):
-        super().__init__(master, bg=BG)
-        self.app = app
-        self.tree = None
-        self._build()
-
-    def _build(self):
-        _titulo(self, "Eventos de Risco")
-
-        filtro = tk.Frame(self, bg=BG)
-        filtro.pack(pady=6)
-        tk.Label(filtro, text="Filtrar por tipo:", bg=BG,
-                 font=("Segoe UI", 10, "bold")).pack(side="left", padx=4)
-        self.combo_tipo = ttk.Combobox(filtro, state="readonly", width=26,
-                                       values=["Todos"] + TIPOS_RISCO)
-        self.combo_tipo.current(0)
-        self.combo_tipo.pack(side="left", padx=4)
-        self.combo_tipo.bind("<<ComboboxSelected>>", lambda e: self.atualizar())
-
-        frame = tk.Frame(self, bg=BG)
-        frame.pack(fill="both", expand=True, padx=20, pady=(5, 15))
-        cols = ["id", "tipo", "metodo", "hora", "forca_g", "instab"]
-        self.tree = ttk.Treeview(frame, columns=cols, show="headings", height=14)
-        for key, label, width in [
-            ("id", "ID", 50), ("tipo", "Tipo", 180), ("metodo", "Método", 110),
-            ("hora", "Hora", 90), ("forca_g", "Força G", 80), ("instab", "Instab.", 80),
-        ]:
-            self.tree.heading(key, text=label)
-            self.tree.column(key, width=width, anchor="center")
-        vsb = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=vsb.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        vsb.pack(side="right", fill="y")
-
-    def atualizar(self):
-        rota_id = self.app.rota_atual_id
-        for i in self.tree.get_children():
-            self.tree.delete(i)
-        if not rota_id:
-            return
-        tipo = self.combo_tipo.get()
-        if tipo == "Todos":
-            tipo = None
-        try:
-            self.app.api.analisar_rota(rota_id)
-            resp = self.app.api.list_eventos(rota_id, tipo)
-        except requests.exceptions.RequestException:
-            return
-        if resp.status_code != 200:
-            return
-        for e in resp.json():
-            fg = e.get("forca_g")
-            self.tree.insert("", "end", values=(
-                e["id"], e.get("classificacao"), e.get("metodo"),
-                _so_hora(e.get("data_hora")),
-                f"{fg:.2f}" if fg is not None else "",
-                f"{e.get('instabilidade'):.2f}" if e.get("instabilidade") is not None else "",
-            ))
-
-
-# =========================================================================
-# GraficoTab (painel: velocidade + Força G + RPM)
+# Gráfico (velocidade + Força G + RPM, com limiares do JSON e tooltip)
 # =========================================================================
 class GraficoTab(tk.Frame):
 
     def __init__(self, master, app):
         super().__init__(master, bg=BG)
         self.app = app
-        self.figure = Figure(figsize=(7.2, 6.2), dpi=100, facecolor=BG)
+        self._pontos = []
+        self.figure = Figure(figsize=(7.2, 6.0), dpi=100, facecolor=BG)
         self.ax_vel = self.figure.add_subplot(311)
         self.ax_fg = self.figure.add_subplot(312, sharex=self.ax_vel)
         self.ax_rpm = self.figure.add_subplot(313, sharex=self.ax_vel)
         self.canvas = FigureCanvasTkAgg(self.figure, master=self)
+        self._tooltip = None
         self._build()
 
     def _build(self):
-        _titulo(self, "Comportamento da Rota")
+        _titulo(self, "Comportamento da Rota",
+                "Linhas tracejadas = limiares configurados. Passe o mouse para ver os valores.")
         self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=15, pady=(5, 15))
+        self.canvas.mpl_connect("motion_notify_event", self._on_hover)
         self.plotar()
+
+    def _limiares(self):
+        try:
+            resp = self.app.api.get_limiares()
+            if resp.status_code == 200:
+                return resp.json()
+        except requests.exceptions.RequestException:
+            pass
+        return {}
 
     def plotar(self):
         rota_id = self.app.rota_atual_id
-        for ax in (self.ax_vel, self.ax_fg, self.ax_rpm):
-            ax.clear()
+        for eixo in (self.ax_vel, self.ax_fg, self.ax_rpm):
+            eixo.clear()
+        self._pontos = []
+        self._tooltip = None
+
         if not rota_id:
-            self.ax_vel.text(0.5, 0.5, "Cadastre uma rota para visualizar o gráfico.",
-                             ha="center", va="center", fontsize=12, color="#636e72",
+            self.ax_vel.text(0.5, 0.5, "Selecione uma rota para visualizar o gráfico.",
+                             ha="center", va="center", fontsize=12, color=CINZA,
                              transform=self.ax_vel.transAxes)
             self.ax_vel.set_xticks([])
             self.ax_vel.set_yticks([])
@@ -516,50 +1023,92 @@ class GraficoTab(tk.Frame):
 
         dados = resp.json()
         pontos = dados["pontos"]
+        self._pontos = pontos
         tempos = [p["tempo"] for p in pontos]
         velocidades = [p["velocidade"] if p["velocidade"] is not None else 0.0 for p in pontos]
-        fgs = [p["forca_g"] if p["forca_g"] is not None else 0.0 for p in pontos]
+        forcas = [p["forca_g"] if p["forca_g"] is not None else 0.0 for p in pontos]
         rpms = [p["rpm"] if p["rpm"] is not None else 0.0 for p in pontos]
+        limiares = self._limiares()
 
-        # Painel 1 — velocidade com pontos de risco coloridos
+        # Painel 1 — velocidade + pontos de risco coloridos.
         self.ax_vel.plot(tempos, velocidades, color="#0984e3", linewidth=1.3,
                          label="Velocidade (km/h)")
+        if limiares.get("velocidade_max") is not None:
+            self.ax_vel.axhline(y=limiares["velocidade_max"], color="#f39c12",
+                                linestyle="--", linewidth=1.1,
+                                label=f"Limite {limiares['velocidade_max']:.0f} km/h")
         por_tipo = {}
-        for p in pontos:
-            if p["risco"] and p["classificacoes"]:
-                t = tipo_principal(p["classificacoes"])
-                por_tipo.setdefault(t, []).append((p["tempo"], p["velocidade"]))
-        for tipo, pts in por_tipo.items():
-            if pts:
-                t, v = zip(*pts)
+        for ponto in pontos:
+            if ponto["risco"] and ponto["classificacoes"]:
+                tipo = tipo_principal(ponto["classificacoes"])
+                por_tipo.setdefault(tipo, []).append((ponto["tempo"], ponto["velocidade"]))
+        for tipo, lista in por_tipo.items():
+            if lista:
+                t, v = zip(*lista)
                 self.ax_vel.scatter(t, v, color=CORES_TIPO.get(tipo, "#d63031"),
                                     s=28, zorder=5, label=tipo)
         self.ax_vel.set_ylabel("Velocidade (km/h)")
         self.ax_vel.set_title(dados["nome"], fontsize=11)
-        self.ax_vel.legend(loc="upper right", fontsize="x-small")
-        self.ax_vel.grid(True, linestyle="--", alpha=0.5)
+        self.ax_vel.legend(loc="upper right", fontsize="x-small", ncol=2)
+        self.ax_vel.grid(True, linestyle="--", alpha=0.4)
 
-        # Painel 2 — Força G resultante com limites CTB
-        self.ax_fg.plot(tempos, fgs, color="#e17055", linewidth=1.2, label="Força G (m/s²)")
-        self.ax_fg.axhline(y=2.5, color="#f39c12", linestyle="--", linewidth=1.1)
-        self.ax_fg.axhline(y=-3.0, color="#d63031", linestyle="--", linewidth=1.1)
+        # Painel 2 — Força G resultante + limiar lateral.
+        self.ax_fg.plot(tempos, forcas, color="#e17055", linewidth=1.2,
+                        label="Força G resultante (m/s²)")
+        if limiares.get("lateral_max") is not None:
+            self.ax_fg.axhline(y=limiares["lateral_max"], color="#d63031",
+                               linestyle="--", linewidth=1.1,
+                               label=f"Limite lateral {limiares['lateral_max']:.1f} m/s²")
         self.ax_fg.set_ylabel("Força G (m/s²)")
         self.ax_fg.legend(loc="upper right", fontsize="x-small")
-        self.ax_fg.grid(True, linestyle="--", alpha=0.5)
+        self.ax_fg.grid(True, linestyle="--", alpha=0.4)
 
-        # Painel 3 — RPM
+        # Painel 3 — RPM + limiar.
         self.ax_rpm.plot(tempos, rpms, color="#6c5ce7", linewidth=1.2, label="RPM")
+        if limiares.get("rpm_max") is not None:
+            self.ax_rpm.axhline(y=limiares["rpm_max"], color="#e84393",
+                                linestyle="--", linewidth=1.1,
+                                label=f"Limite {limiares['rpm_max']:.0f} RPM")
         self.ax_rpm.set_ylabel("RPM")
         self.ax_rpm.set_xlabel("Tempo (s)")
         self.ax_rpm.legend(loc="upper right", fontsize="x-small")
-        self.ax_rpm.grid(True, linestyle="--", alpha=0.5)
+        self.ax_rpm.grid(True, linestyle="--", alpha=0.4)
+
+        self._tooltip = self.ax_vel.annotate(
+            "", xy=(0, 0), xytext=(10, 10), textcoords="offset points",
+            bbox=dict(boxstyle="round,pad=0.4", fc="white", ec=BORDA),
+            fontsize=8, arrowprops=dict(arrowstyle="->", color=CINZA),
+        )
+        self._tooltip.set_visible(False)
 
         self.figure.tight_layout()
         self.canvas.draw()
 
+    def _on_hover(self, event):
+        if self._tooltip is None or not self._pontos or event.inaxes is not self.ax_vel:
+            if self._tooltip is not None and self._tooltip.get_visible():
+                self._tooltip.set_visible(False)
+                self.canvas.draw_idle()
+            return
+        if event.xdata is None:
+            return
+        ponto = min(self._pontos, key=lambda p: abs(p["tempo"] - event.xdata))
+        texto = (
+            f"t = {ponto['tempo']:.1f} s\n"
+            f"Velocidade: {_fmt_num(ponto['velocidade']) or '—'} km/h\n"
+            f"Força G: {_fmt_num(ponto['forca_g'], 2) or '—'} m/s²\n"
+            f"RPM: {_fmt_num(ponto['rpm'], 0) or '—'}"
+        )
+        if ponto["classificacoes"]:
+            texto += "\nRisco: " + ", ".join(sorted(set(ponto["classificacoes"])))
+        self._tooltip.xy = (ponto["tempo"], ponto["velocidade"] or 0)
+        self._tooltip.set_text(texto)
+        self._tooltip.set_visible(True)
+        self.canvas.draw_idle()
+
 
 # =========================================================================
-# MapaTab
+# Mapa
 # =========================================================================
 class MapaTab(tk.Frame):
 
@@ -570,10 +1119,9 @@ class MapaTab(tk.Frame):
         self._build()
 
     def _build(self):
-        _titulo(self, "Trajeto no Mapa")
-
-        self.msg = tk.Label(self, text="Carregando...", bg=BG, fg="#636e72",
-                            font=("Segoe UI", 11))
+        _titulo(self, "Trajeto no Mapa", "Pontos de GPS e trechos com eventos de risco.")
+        self.msg = tk.Label(self, text="Carregando...", bg=BG, fg=CINZA,
+                            font=("Segoe UI", 10))
         self.msg.pack(pady=4)
 
         self.container = tk.Frame(self, bg=BG)
@@ -598,7 +1146,7 @@ class MapaTab(tk.Frame):
         self.mapa.delete_all_path()
         self.mapa.delete_all_marker()
         if not rota_id:
-            self.msg.configure(text="Cadastre uma rota com GPS para visualizar o trajeto.")
+            self.msg.configure(text="Selecione uma rota com GPS para visualizar o trajeto.")
             return
         try:
             self.app.api.analisar_rota(rota_id)
@@ -608,31 +1156,35 @@ class MapaTab(tk.Frame):
         if resp.status_code != 200:
             return
         pontos = resp.json()["pontos"]
-        coord = [(p["latitude"], p["longitude"]) for p in pontos
-                 if p.get("latitude") is not None and p.get("longitude") is not None]
-        if not coord:
+        coordenadas = [(p["latitude"], p["longitude"]) for p in pontos
+                       if p.get("latitude") is not None and p.get("longitude") is not None]
+        if not coordenadas:
             self.msg.configure(text="Esta rota não possui dados de GPS (latitude/longitude).")
             return
 
-        self.mapa.set_position(coord[0][0], coord[0][1])
-        self.mapa.set_path(coord, color="#0984e3", width=4)
+        self.mapa.set_position(coordenadas[0][0], coordenadas[0][1])
+        if len(coordenadas) >= 2:
+            self.mapa.set_path(coordenadas, color="#0984e3", width=4)
 
         n_risco = 0
-        for p in pontos:
-            if p["risco"] and p.get("latitude") is not None and p.get("longitude") is not None:
-                t = tipo_principal(p["classificacoes"])
+        for ponto in pontos:
+            if ponto["risco"] and ponto.get("latitude") is not None and ponto.get("longitude") is not None:
+                tipo = tipo_principal(ponto["classificacoes"])
+                cor = CORES_TIPO.get(tipo, "#d63031")
                 self.mapa.set_marker(
-                    p["latitude"], p["longitude"], text="⚠",
-                    marker_color_circle=CORES_TIPO.get(t, "#d63031"),
-                    marker_color_outside=CORES_TIPO.get(t, "#d63031"),
+                    ponto["latitude"], ponto["longitude"],
+                    text=tipo or "Risco",
+                    marker_color_circle=cor, marker_color_outside=cor,
                     text_color="white",
                 )
                 n_risco += 1
-        self.msg.configure(text=f"{len(coord)} pontos de GPS · {n_risco} trecho(s) de risco.")
+        self.msg.configure(
+            text=f"{len(coordenadas)} pontos de GPS · {n_risco} trecho(s) de risco."
+        )
 
 
 # =========================================================================
-# CompararTab
+# Comparar
 # =========================================================================
 class CompararTab(tk.Frame):
 
@@ -644,89 +1196,88 @@ class CompararTab(tk.Frame):
         self._build()
 
     def _build(self):
-        _titulo(self, "Comparar Rotas")
+        _titulo(self, "Comparar Rotas", "Compare o score e as métricas de duas viagens.")
 
-        sel = tk.Frame(self, bg=BG)
-        sel.pack(pady=6)
-        tk.Label(sel, text="Rota A:", bg=BG, font=("Segoe UI", 10, "bold")).pack(side="left", padx=4)
-        self.combo_a = ttk.Combobox(sel, state="readonly", width=28)
+        selecao = tk.Frame(self, bg=BG)
+        selecao.pack(anchor="w", padx=20, pady=6)
+        tk.Label(selecao, text="Rota A:", bg=BG, fg=TEXTO,
+                 font=("Segoe UI", 10, "bold")).pack(side="left", padx=4)
+        self.combo_a = ttk.Combobox(selecao, state="readonly", width=28)
         self.combo_a.pack(side="left", padx=4)
-        tk.Label(sel, text="Rota B:", bg=BG, font=("Segoe UI", 10, "bold")).pack(side="left", padx=4)
-        self.combo_b = ttk.Combobox(sel, state="readonly", width=28)
+        tk.Label(selecao, text="Rota B:", bg=BG, fg=TEXTO,
+                 font=("Segoe UI", 10, "bold")).pack(side="left", padx=4)
+        self.combo_b = ttk.Combobox(selecao, state="readonly", width=28)
         self.combo_b.pack(side="left", padx=4)
-        _botao(sel, "Comparar", "#6c5ce7", self.comparar, width=12).pack(side="left", padx=6)
+        _botao(selecao, "Comparar", "#6c5ce7", self.comparar, width=12).pack(
+            side="left", padx=6)
 
         frame = tk.Frame(self, bg=BG)
         frame.pack(fill="both", expand=True, padx=20, pady=(5, 15))
-        cols = ["metrica", "a", "b"]
-        self.tree = ttk.Treeview(frame, columns=cols, show="headings", height=10)
+        cols = ("metrica", "a", "b")
+        self.tree = ttk.Treeview(frame, columns=cols, show="headings", height=11)
         self.tree.heading("metrica", text="Métrica")
         self.tree.heading("a", text="Rota A")
         self.tree.heading("b", text="Rota B")
-        self.tree.column("metrica", width=220, anchor="w")
-        self.tree.column("a", width=180, anchor="center")
-        self.tree.column("b", width=180, anchor="center")
+        self.tree.column("metrica", width=240, anchor="w")
+        self.tree.column("a", width=200, anchor="center")
+        self.tree.column("b", width=200, anchor="center")
         self.tree.pack(side="left", fill="both", expand=True)
 
     def atualizar(self):
-        try:
-            resp = self.app.api.list_rotas()
-        except requests.exceptions.RequestException:
-            return
-        if resp.status_code != 200:
-            return
-        self.rotas = resp.json()
-        nomes = [f"#{r['id']} — {r['nome']}" for r in self.rotas]
+        self.rotas = self.app.rotas
+        nomes = [_rotulo_rota(r) for r in self.rotas]
         self.combo_a["values"] = nomes
         self.combo_b["values"] = nomes
         if nomes:
             self.combo_a.current(0)
-            if len(nomes) > 1:
-                self.combo_b.current(1)
+            self.combo_b.current(1 if len(nomes) > 1 else 0)
 
-    def _rota_id_do_combo(self, combo):
-        idx = combo.current()
-        if idx < 0 or idx >= len(self.rotas):
+    def _rota_id(self, combo):
+        indice = combo.current()
+        if indice < 0 or indice >= len(self.rotas):
             return None
-        return self.rotas[idx]["id"]
+        return self.rotas[indice]["id"]
 
     def comparar(self):
-        ida = self._rota_id_do_combo(self.combo_a)
-        idb = self._rota_id_do_combo(self.combo_b)
+        ida = self._rota_id(self.combo_a)
+        idb = self._rota_id(self.combo_b)
         if ida is None or idb is None:
             messagebox.showwarning("Aviso", "Selecione as duas rotas para comparar.")
             return
         try:
             resp = self.app.api.comparar_rotas([ida, idb])
-        except requests.exceptions.RequestException as e:
-            messagebox.showerror("Erro", f"Erro de comunicação com a API:\n{e}")
+        except requests.exceptions.RequestException as erro:
+            _erro_conexao(erro)
             return
         if resp.status_code != 200:
-            messagebox.showerror("Erro", extract_error(resp))
+            _erro_api(resp)
             return
         rotas = resp.json()["rotas"]
         if len(rotas) < 2:
+            messagebox.showwarning("Aviso", "Selecione duas rotas válidas.")
             return
 
-        for i in self.tree.get_children():
-            self.tree.delete(i)
+        for item in self.tree.get_children():
+            self.tree.delete(item)
 
-        def fmt(v, sufixo="", casas=1):
-            if v is None:
+        def fmt(valor, casas=1):
+            if valor is None:
                 return "—"
-            return f"{v:.{casas}f}{sufixo}" if isinstance(v, (int, float)) else str(v)
+            return f"{valor:.{casas}f}" if isinstance(valor, (int, float)) else str(valor)
 
         linhas = [
-            ("Score de segurança", lambda r: r["score"], ""),
-            ("Duração", lambda r: formatar_duracao(r.get("duracao_segundos", 0)), ""),
-            ("Distância (km)", lambda r: fmt(r.get("distancia_km"), "", 2), ""),
-            ("Velocidade média (km/h)", lambda r: fmt(r.get("velocidade_media"), "", 1), ""),
-            ("Velocidade máxima (km/h)", lambda r: fmt(r.get("velocidade_maxima"), "", 1), ""),
-            ("RPM máximo", lambda r: fmt(r.get("rpm_maximo"), "", 0), ""),
-            ("Total de eventos", lambda r: str(r.get("total_eventos", 0)), ""),
+            ("Score de segurança", lambda r: str(r["score"])),
+            ("Duração", lambda r: formatar_duracao(r.get("duracao_segundos", 0))),
+            ("Distância (km)", lambda r: fmt(r.get("distancia_km"), 2)),
+            ("Velocidade média (km/h)", lambda r: fmt(r.get("velocidade_media"))),
+            ("Velocidade máxima (km/h)", lambda r: fmt(r.get("velocidade_maxima"))),
+            ("RPM máximo", lambda r: fmt(r.get("rpm_maximo"), 0)),
+            ("Total de eventos", lambda r: str(r.get("total_eventos", 0))),
+            ("Comportamento atípico",
+             lambda r: str((r.get("eventos_por_tipo") or {}).get("Comportamento atípico", 0))),
         ]
-        for label, fn, _ in linhas:
-            self.tree.insert("", "end", values=(label, fn(rotas[0]), fn(rotas[1])))
+        for rotulo, funcao in linhas:
+            self.tree.insert("", "end", values=(rotulo, funcao(rotas[0]), funcao(rotas[1])))
 
         melhor = "Rota A" if rotas[0]["score"] >= rotas[1]["score"] else "Rota B"
         messagebox.showinfo(
@@ -735,76 +1286,3 @@ class CompararTab(tk.Frame):
             f"({max(rotas[0]['score'], rotas[1]['score'])} vs "
             f"{min(rotas[0]['score'], rotas[1]['score'])}).",
         )
-
-
-# =========================================================================
-# ConfiguracaoTab
-# =========================================================================
-class ConfiguracaoTab(tk.Frame):
-
-    def __init__(self, master, app):
-        super().__init__(master, bg=BG)
-        self.app = app
-        self.entries = {}
-        self._build()
-
-    def _build(self):
-        _titulo(self, "Configurações de Detecção")
-
-        tk.Label(self, text="Ajuste os limiares usados para classificar os eventos de risco.",
-                 bg=BG, fg="#636e72", font=("Segoe UI", 10)).pack(pady=(0, 10))
-
-        form = tk.Frame(self, bg=BG)
-        form.pack(pady=5)
-        self.entries = {}
-        for i, (chave, label) in enumerate(LIMIARES_INFO):
-            tk.Label(form, text=label, bg=BG, font=("Segoe UI", 10, "bold")).grid(
-                row=i, column=0, sticky="w", pady=6)
-            entry = tk.Entry(form, width=14, font=("Segoe UI", 11))
-            entry.grid(row=i, column=1, pady=6, padx=10)
-            self.entries[chave] = entry
-
-        btns = tk.Frame(self, bg=BG)
-        btns.pack(pady=16)
-        _botao(btns, "Salvar", "#00b894", self.salvar, width=14).pack(side="left", padx=6)
-        _botao(btns, "Recarregar", "#636e72", self.atualizar, width=14).pack(side="left", padx=6)
-
-    def atualizar(self):
-        try:
-            resp = self.app.api.get_limiares()
-        except requests.exceptions.RequestException:
-            return
-        if resp.status_code != 200:
-            return
-        limiares = resp.json()
-        for chave, entry in self.entries.items():
-            valor = limiares.get(chave)
-            entry.delete(0, tk.END)
-            if valor is not None:
-                entry.insert(0, str(valor))
-
-    def salvar(self):
-        dados = {}
-        for chave, entry in self.entries.items():
-            texto = entry.get().strip().replace(",", ".")
-            if texto == "":
-                continue
-            try:
-                dados[chave] = float(texto)
-            except ValueError:
-                messagebox.showerror("Erro", f"Valor inválido para '{chave}': {texto}")
-                return
-        try:
-            resp = self.app.api.set_limiares(dados)
-        except requests.exceptions.RequestException as e:
-            messagebox.showerror("Erro", f"Erro de comunicação com a API:\n{e}")
-            return
-        if resp.status_code == 200:
-            n = resp.json().get("rotas_reanalisadas", 0)
-            msg = "Limiares atualizados com sucesso."
-            if n:
-                msg += f"\n{int(n)} rota(s) reanalisada(s) com os novos limiares."
-            messagebox.showinfo("Sucesso", msg)
-            self.app.refresh_detalhes()
-        else:
-            messagebox.showerror("Erro", extract_error(resp))
