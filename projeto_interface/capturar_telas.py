@@ -38,8 +38,12 @@ Time (sec), Vehicle speed (km/h), Engine RPM (RPM), Accel X (m/s²), Accel Y (m/
 
 def capture(widget, name, delay=0.4):
     widget.update_idletasks()
-    widget.update()
-    time.sleep(delay)
+    # Bombeia o event loop para concluir os carregamentos assíncronos
+    # (análise, gráfico, sensores) antes de fotografar.
+    fim = time.time() + delay
+    while time.time() < fim:
+        widget.update()
+        time.sleep(0.03)
     x = widget.winfo_rootx()
     y = widget.winfo_rooty()
     w = widget.winfo_width()
@@ -64,9 +68,12 @@ def main():
     api.analisar_rota(rota_id)
 
     root = tk.Tk()
+    root.attributes("-topmost", True)
     app = App(root, api)
     app.definir_rota(rota_id)
     root.update()
+    root.lift()
+    root.focus_force()
 
     # Dados → Rotas / Leituras / Eventos
     app.mostrar("dados")
