@@ -41,6 +41,8 @@ def _gerar_csv(seed, base_vel, janelas):
         "Latitude (deg), Longitude (deg)",
     ]
     lat0, lon0 = -22.588833, -43.284300
+    lat, lon = lat0, lon0
+    rumo = math.radians(40.0)  # direção fixa (nordeste) da rota sintética
     speed = base_vel
     rpm = 850.0 + base_vel * 30.0
     throttle = 10.0 + base_vel * 0.35
@@ -62,8 +64,9 @@ def _gerar_csv(seed, base_vel, janelas):
         elif k == "curva":
             speed = base_vel + 5.0
         elif k == "excesso":
-            # Ultrapassa o limite de forma imediata (evento curto e isolado).
-            speed = 108.0
+            # Sobe gradualmente até ultrapassar o limite (aceleração ~0,23 g,
+            # abaixo do limiar de "aceleração brusca", para não gerar cascata).
+            speed = min(108.0, speed + 4.0)
         elif k == "rpm":
             speed = base_vel + 4.0
         elif k == "acelerador":
@@ -99,8 +102,12 @@ def _gerar_csv(seed, base_vel, janelas):
             throttle = 10.0 + speed * 0.35 + rng.gauss(0, 0.5)
         throttle = round(max(0.0, min(100.0, throttle)), 1)
 
-        lat = lat0 + i * 0.00012
-        lon = lon0 + i * 0.00010
+        # GPS integrado a partir da velocidade (coerente com o painel):
+        # desloca-se na direção fixa pela distância percorrida no passo.
+        vm = (prev + speed) / 2.0  # km/h médio do passo
+        passo_km = vm / 3.6 * dt / 1000.0
+        lat += passo_km * math.cos(rumo) / 111.32
+        lon += passo_km * math.sin(rumo) / (111.32 * math.cos(math.radians(lat)))
         linhas.append(
             f"{t:.1f}, {speed:.1f}, {rpm:.0f}, {ax:.2f}, {ay:.2f}, "
             f"{az:.2f}, {throttle:.1f}, {lat:.6f}, {lon:.6f}"
@@ -134,14 +141,21 @@ def main():
     # Estado de demonstração consistente: remove rotas antigas e importa duas
     # rotas sintéticas com perfis de condução distintos. Como apagar é uma ação
     # destrutiva, pede confirmação (a menos que --sim seja passado).
+    # Remove apenas as rotas de demonstração (nomes fixos), preservando qualquer
+    # rota real importada pelo usuário. Como apagar é uma ação destrutiva, pede
+    # confirmação (a menos que --sim seja passado).
     resp = api.list_rotas()
     rotas_existentes = resp.json() if resp.status_code == 200 else []
-    if rotas_existentes and "--sim" not in sys.argv:
-        print(f"Atenção: {len(rotas_existentes)} rota(s) existente(s) serão EXCLUÍDAS.")
+    nomes_demo = {"Condução Agressiva", "Condução Defensiva"}
+    demos = [r for r in rotas_existentes if r.get("nome") in nomes_demo]
+    outras = [r for r in rotas_existentes if r.get("nome") not in nomes_demo]
+    if demos and "--sim" not in sys.argv:
+        print(f"Atenção: {len(demos)} rota(s) de demonstração serão EXCLUÍDAS "
+              f"({len(outras)} rota(s) sua(s) serão preservadas).")
         if input("Digite 'sim' para continuar (ou Ctrl+C para cancelar): ").strip().lower() != "sim":
             print("Cancelado.")
             return
-    for rota in rotas_existentes:
+    for rota in demos:
         api.excluir_rota(rota["id"])
 
     # Ambos os trajetos compartilham os mesmos tipos de evento (para que o
@@ -150,13 +164,13 @@ def main():
         ("fren", 160, 1),
         ("acel", 300, 1),
         ("curva", 400, 2),
-        ("excesso", 520, 2),
+        ("excesso", 510, 11),
         ("rpm", 560, 1),
         ("acelerador", 600, 1),
     ]
     janelas_defensivo = [
         ("curva", 400, 2),
-        ("excesso", 520, 2),
+        ("excesso", 510, 11),
         ("rpm", 560, 1),
     ]
 

@@ -9,6 +9,27 @@ Alinhado à metodologia de análise:
 import math
 import statistics
 
+# Janela temporal mínima para estimar derivadas (aceleração e variação do
+# acelerador). Quando a amostragem é muito densa (ex.: OBD-II a ~333 Hz), a
+# diferença entre amostras quase simultâneas amplifica o ruído de quantização
+# (velocidade em 1 km/h, acelerador em 1 %) e produz valores fisicamente
+# impossíveis (centenas de m/s²). Derivar sobre uma janela mínima de 0,5 s
+# suaviza esse ruído sem alterar o resultado em coletas com dt >= 0,5 s.
+MIN_DT = 0.5  # segundos
+
+
+def _anterior_na_janela(leituras, indice, campo):
+    """Última leitura anterior (com ``campo`` não nulo) a pelo menos ``MIN_DT``
+    segundos da leitura ``indice``. Retorna ``None`` se não houver."""
+    atual = leituras[indice]
+    for j in range(indice - 1, -1, -1):
+        candidato = leituras[j]
+        if getattr(candidato, campo) is None:
+            continue
+        if (atual.data_hora - candidato.data_hora).total_seconds() >= MIN_DT:
+            return candidato
+    return None
+
 
 def distancia_haversine(lat1, lon1, lat2, lon2) -> float:
     """Distância (em km) entre duas coordenadas, pela fórmula de Haversine."""
@@ -34,12 +55,18 @@ def forca_g_resultante(leitura) -> float:
 
 
 def aceleracao_longitudinal(leituras, indice) -> float:
-    """Aceleração longitudinal derivada da velocidade (Δv/Δt), em m/s²."""
+    """Aceleração longitudinal derivada da velocidade (Δv/Δt), em m/s².
+
+    Usa uma janela mínima de ``MIN_DT`` segundos (ver ``_anterior_na_janela``)
+    para não amplificar o ruído de quantização em amostragens muito densas.
+    """
     if indice == 0:
         return 0.0
     atual = leituras[indice]
-    anterior = leituras[indice - 1]
-    if atual.velocidade is None or anterior.velocidade is None:
+    if atual.velocidade is None:
+        return 0.0
+    anterior = _anterior_na_janela(leituras, indice, "velocidade")
+    if anterior is None:
         return 0.0
     dt = (atual.data_hora - anterior.data_hora).total_seconds()
     if dt <= 0:
@@ -49,12 +76,17 @@ def aceleracao_longitudinal(leituras, indice) -> float:
 
 
 def variacao_acelerador(leituras, indice) -> float:
-    """Variação da posição do acelerador (Δ% / Δt), indicador de condução agressiva."""
+    """Variação da posição do acelerador (Δ% / Δt), indicador de condução agressiva.
+
+    Usa uma janela mínima de ``MIN_DT`` segundos (ver ``_anterior_na_janela``).
+    """
     if indice == 0:
         return 0.0
     atual = leituras[indice]
-    anterior = leituras[indice - 1]
-    if atual.posicao_acelerador is None or anterior.posicao_acelerador is None:
+    if atual.posicao_acelerador is None:
+        return 0.0
+    anterior = _anterior_na_janela(leituras, indice, "posicao_acelerador")
+    if anterior is None:
         return 0.0
     dt = (atual.data_hora - anterior.data_hora).total_seconds()
     if dt <= 0:

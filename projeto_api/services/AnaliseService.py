@@ -1,4 +1,3 @@
-import statistics
 from datetime import datetime
 
 from entities.Base import db
@@ -211,7 +210,7 @@ class AnaliseService:
             "nome": rota.nome,
             "duracao_segundos": round(duracao, 1),
             "distancia_km": round(distancia, 3),
-            "velocidade_media": round(statistics.mean(velocidades), 1) if velocidades else 0.0,
+            "velocidade_media": round(self.__velocidade_media(leituras), 1),
             "velocidade_maxima": round(max(velocidades), 1) if velocidades else 0.0,
             "rpm_maximo": round(max(rpms), 1) if rpms else 0.0,
             "total_eventos": len(eventos),
@@ -250,6 +249,27 @@ class AnaliseService:
             if d is not None:
                 total += d
         return total
+
+    def __velocidade_media(self, leituras) -> float:
+        """Velocidade média ponderada pelo tempo (km/h).
+
+        A média aritmética simples pesa igualmente amostras coletadas em ritmos
+        diferentes. Quando o veículo para (ou há falhas de coleta), as amostras
+        em movimento ficam super-representadas e a média aritmética superestima
+        a velocidade real. Pondera cada leitura pelo intervalo até a próxima.
+        """
+        total = 0.0
+        tempo_total = 0.0
+        for i in range(len(leituras) - 1):
+            atual = leituras[i]
+            if atual.velocidade is None:
+                continue
+            dt = (leituras[i + 1].data_hora - atual.data_hora).total_seconds()
+            if dt <= 0:
+                continue
+            total += atual.velocidade * dt
+            tempo_total += dt
+        return total / tempo_total if tempo_total else 0.0
 
     def __calcular_score(self, eventos_por_tipo: dict) -> int:
         """Score de segurança: começa em 100 e desconta conforme a severidade."""

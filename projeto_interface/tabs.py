@@ -1342,7 +1342,17 @@ class GraficoTab(tk.Frame):
 
     def _desenhar_forca_g(self, eixo, pontos, limiares):
         tempos = [p["tempo"] for p in pontos]
-        forcas = [p["forca_g"] if p["forca_g"] is not None else 0.0 for p in pontos]
+        forcas = [p["forca_g"] for p in pontos]
+        # Sem nenhum valor de acelerômetro (CSV sem accel_x/accel_y), desenhar
+        # uma reta em 0 seria enganoso: exibe um aviso em vez de "tudo ok".
+        if not any(v is not None for v in forcas):
+            eixo.text(0.5, 0.5, "Sem dados de acelerômetro\n(Força G indisponível)",
+                      ha="center", va="center", fontsize=11, color=CINZA,
+                      transform=eixo.transAxes)
+            eixo.set_xticks([])
+            eixo.set_yticks([])
+            return
+        forcas = [v if v is not None else 0.0 for v in forcas]
         limite_fg = limiares.get("forca_g_max", limiares.get("lateral_max"))
         eixo.plot(tempos, forcas, color="#e17055", linewidth=1.2,
                   label="Força G resultante (m/s²)")
@@ -1495,10 +1505,14 @@ class SensorTab(tk.Frame):
         for item in self.tree.get_children():
             self.tree.delete(item)
         for m in metricas:
+            if m.get("sem_dados"):
+                fora_n, fora_pct = "—", "—"
+            else:
+                fora_n, fora_pct = m["fora_n"], f"{m['fora_pct']:.1f}%"
             self.tree.insert("", "end", values=(
                 m["rotulo"], _fmt_num(m["min"], m["casas"]),
                 _fmt_num(m["max"], m["casas"]), _fmt_num(m["media"], m["casas"]),
-                m["limiar_texto"], m["fora_n"], f"{m['fora_pct']:.1f}%",
+                m["limiar_texto"], fora_n, fora_pct,
             ))
 
         self._desenhar_barras(metricas)
@@ -1550,11 +1564,15 @@ class SensorTab(tk.Frame):
             return _fmt_num(hi if hi is not None else lo, casas)
 
         def metrica(rotulo, valores, casas, lo, hi):
+            presentes = [v for v in valores if v is not None]
             n = fora(valores, lo=lo, hi=hi)
             return {
                 "rotulo": rotulo, "casas": casas, **stats(valores),
                 "limiar_texto": rotulo_limiar(lo, hi, casas),
                 "fora_n": n, "fora_pct": pct(n, valores),
+                # Sem nenhuma leitura do canal, exibir "—" em vez de "0,0%"
+                # (que sugeriria "sem violações" quando não há dado nenhum).
+                "sem_dados": len(presentes) == 0,
             }
 
         return [
@@ -1567,16 +1585,17 @@ class SensorTab(tk.Frame):
     def _desenhar_barras(self, metricas):
         self.ax.clear()
         nomes = ["Velocidade", "Força G", "RPM", "Acel. long."]
-        valores = [m["fora_pct"] for m in metricas]
+        valores = [0.0 if m.get("sem_dados") else m["fora_pct"] for m in metricas]
         cores = ["#0984e3", "#e17055", "#6c5ce7", "#00b894"]
         barras = self.ax.bar(nomes, valores, color=cores[:len(nomes)])
         self.ax.set_ylabel("% de leituras fora do limiar")
         topo = max(valores) * 1.15 if valores else 0
         self.ax.set_ylim(0, max(topo, 10))
-        for barra, v in zip(barras, valores):
+        for barra, m in zip(barras, metricas):
+            rotulo = "—" if m.get("sem_dados") else f"{m['fora_pct']:.1f}%"
             self.ax.text(barra.get_x() + barra.get_width() / 2,
                          barra.get_height() + max(topo, 10) * 0.02,
-                         f"{v:.1f}%", ha="center", va="bottom", fontsize=9)
+                         rotulo, ha="center", va="bottom", fontsize=9)
         self.ax.grid(axis="y", linestyle="--", alpha=0.4)
         self.figure.tight_layout()
         self.canvas.draw()
