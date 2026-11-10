@@ -217,10 +217,13 @@ Comportamentos da interface:
 - **Nova Rota** aceita **vários CSVs de uma vez**; cada arquivo vira uma rota
   com o nome do próprio arquivo.
 - As tabelas de **Dados** carregam na primeira visita a cada aba e, depois disso,
-  são atualizadas **manualmente** pelo botão **Atualizar** (ou após criar/editar/excluir).
+  são atualizadas **manualmente** pelo botão **Atualizar** (criar/editar/excluir
+  não recarrega a tabela; só o combo global de rotas).
 - O seletor **"Rota em análise"** (barra superior) aparece apenas em
   **Visão Geral**, **Gráfico** e **Sensores**.
 - **Gráfico** e **Sensores** têm barra de **zoom/pan** (matplotlib).
+- No **Gráfico**, o seletor **"Painel"** (barra superior) permite exibir um único
+  canal (Velocidade, Força G ou RPM) em tela cheia ou os três empilhados (**Todos**).
 - Se a API estiver fora do ar, a interface mostra **"API offline"** com o botão
   **"Tentar novamente"** e tenta reconectar sozinha.
 

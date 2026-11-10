@@ -176,14 +176,33 @@ class App:
 
         topo = tk.Frame(self.area, bg=BG, highlightbackground=BORDA, highlightthickness=1)
         topo.pack(fill="x")
-        self.filtro_rota = tk.Frame(topo, bg=BG)
-        self.filtro_rota.pack(side="left", pady=8)
+
+        # Container dos seletores da barra superior. Cada um é mostrado/ocultado
+        # conforme a seção ativa (sem alterar a ordem do pack dos demais itens).
+        self.filtros = tk.Frame(topo, bg=BG)
+        self.filtros.pack(side="left", pady=8)
+
+        self.filtro_rota = tk.Frame(self.filtros, bg=BG)
+        self.filtro_rota.pack(side="left")
         tk.Label(self.filtro_rota, text="Rota em análise:",
                  font=("Segoe UI", 10, "bold"), bg=BG, fg=TEXTO
                  ).pack(side="left", padx=(15, 6))
-        self.combo_rota = ttk.Combobox(self.filtro_rota, state="readonly", width=42)
+        self.combo_rota = ttk.Combobox(self.filtro_rota, state="readonly", width=38)
         self.combo_rota.pack(side="left")
         self.combo_rota.bind("<<ComboboxSelected>>", self._trocar_rota)
+
+        self.filtro_grafico = tk.Frame(self.filtros, bg=BG)
+        self.filtro_grafico.pack(side="left")
+        tk.Label(self.filtro_grafico, text="Painel:", font=("Segoe UI", 10, "bold"),
+                 bg=BG, fg=TEXTO).pack(side="left", padx=(16, 6))
+        self.combo_painel = ttk.Combobox(
+            self.filtro_grafico, state="readonly", width=13,
+            values=["Todos", "Velocidade", "Força G", "RPM"],
+        )
+        self.combo_painel.current(0)
+        self.combo_painel.pack(side="left")
+        self.combo_painel.bind("<<ComboboxSelected>>", self._trocar_painel)
+
         self.lbl_status = tk.Label(topo, text="", font=("Segoe UI", 9),
                                    bg=BG, fg=CINZA)
         self.lbl_status.pack(side="right", padx=(0, 15))
@@ -240,16 +259,26 @@ class App:
         secao = self.secoes[chave]
 
         # O seletor "Rota em análise" só faz sentido nas seções de análise;
-        # Dados e Comparar têm seus próprios seletores/filtros.
+        # Dados e Comparar têm seus próprios seletores/filtros. O seletor
+        # "Painel" é exclusivo da seção Gráfico.
         if chave in ("dados", "comparar"):
             self.filtro_rota.pack_forget()
         else:
-            self.filtro_rota.pack(side="left", pady=8)
+            self.filtro_rota.pack(side="left")
+
+        if chave == "grafico":
+            self.filtro_grafico.pack(side="left")
+        else:
+            self.filtro_grafico.pack_forget()
 
         if chave == "grafico":
             secao.plotar()
         elif chave != "dados" and hasattr(secao, "atualizar"):
             secao.atualizar()
+
+    def _trocar_painel(self, _event):
+        """Aplica a seleção do seletor "Painel" ao gráfico da seção Gráfico."""
+        self.secoes["grafico"].definir_modo(self.combo_painel.get())
 
     # ------------------------------------------------------------------ #
     # Rotas / seleção global
@@ -281,8 +310,11 @@ class App:
             self.rota_atual_id = None
             self.combo_rota.set("")
 
-        # Atualiza as listas que dependem do cadastro de rotas.
-        self.secoes["dados"].atualizar()
+        # Atualiza as listas que dependem do cadastro de rotas. A tabela de
+        # Dados NÃO é recarregada aqui: ela só atualiza no botão "Atualizar"
+        # (ou na primeira visita a cada aba), conforme a decisão de atualização
+        # manual das tabelas.
+        self.secoes["dados"].carregar_inicial()
         self.secoes["comparar"].atualizar()
 
     # ------------------------------------------------------------------ #

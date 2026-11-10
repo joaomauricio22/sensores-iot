@@ -221,11 +221,13 @@ class FormDialog(tk.Toplevel):
                     if opcoes and campo.get("obrigatorio"):
                         widget.current(0)
             elif tipo == "arquivo":
-                # Campo com botão "Selecionar…" que abre o seletor de arquivo
-                # (mesma função do fluxo de importação de CSV). O valor salvo é
-                # apenas o nome do arquivo (arquivo_origem).
+                # Campo somente leitura com botão "Selecionar…" que abre o
+                # seletor de arquivo. O valor salvo é apenas o nome do arquivo
+                # (arquivo_origem); o texto não é digitável (evita typos), mas
+                # pode ser corrigido de forma controlada pelo botão.
                 container = tk.Frame(form, bg=BG)
-                widget = tk.Entry(container, width=34, font=("Segoe UI", 10))
+                widget = tk.Entry(container, width=34, font=("Segoe UI", 10),
+                                  state="readonly", readonlybackground="#f1f2f6")
                 widget.pack(side="left", fill="x", expand=True)
                 atual = self.valores.get(chave)
                 if atual is not None:
@@ -439,7 +441,9 @@ class RotaTab(tk.Frame):
             return
         criadas = [r for r in resultados if r[1]]
         falhas = [r for r in resultados if not r[1]]
-        self.lbl_status.configure(text=f"{len(criadas)} rota(s) criada(s)")
+        self.lbl_status.configure(
+            text=f"{len(criadas)} rota(s) criada(s) — clique em Atualizar para ver a lista."
+        )
 
         if criadas:
             linhas = [f"{len(criadas)} rota(s) criada(s) com sucesso:"]
@@ -477,6 +481,9 @@ class RotaTab(tk.Frame):
             return
         if resp.status_code == 200:
             self.app.recarregar_rotas(selecionar=rota_id)
+            self.lbl_status.configure(
+                text="Rota atualizada — clique em Atualizar para ver a lista."
+            )
         else:
             _erro_api(resp)
 
@@ -496,6 +503,9 @@ class RotaTab(tk.Frame):
             return
         if resp.status_code == 200:
             self.app.recarregar_rotas()
+            self.lbl_status.configure(
+                text="Rota excluída — clique em Atualizar para ver a lista."
+            )
         else:
             _erro_api(resp)
 
@@ -629,7 +639,9 @@ class LeituraTab(tk.Frame):
             _erro_conexao(erro)
             return
         if resp.status_code in (200, 201):
-            self.atualizar()
+            self.lbl_status.configure(
+                text="Leitura criada — clique em Atualizar para ver a lista."
+            )
             self.app.refresh_detalhes()
         else:
             _erro_api(resp)
@@ -650,7 +662,9 @@ class LeituraTab(tk.Frame):
             _erro_conexao(erro)
             return
         if resp.status_code == 200:
-            self.atualizar()
+            self.lbl_status.configure(
+                text="Leitura atualizada — clique em Atualizar para ver a lista."
+            )
             self.app.refresh_detalhes()
         else:
             _erro_api(resp)
@@ -670,7 +684,9 @@ class LeituraTab(tk.Frame):
             _erro_conexao(erro)
             return
         if resp.status_code == 200:
-            self.atualizar()
+            self.lbl_status.configure(
+                text="Leitura excluída — clique em Atualizar para ver a lista."
+            )
             self.app.refresh_detalhes()
         else:
             _erro_api(resp)
@@ -841,7 +857,9 @@ class EventoRiscoTab(tk.Frame):
             _erro_conexao(erro)
             return
         if resp.status_code in (200, 201):
-            self.atualizar()
+            self.lbl_status.configure(
+                text="Evento criado — clique em Atualizar para ver a lista."
+            )
             self.app.refresh_detalhes()
         else:
             _erro_api(resp)
@@ -865,7 +883,9 @@ class EventoRiscoTab(tk.Frame):
             _erro_conexao(erro)
             return
         if resp.status_code == 200:
-            self.atualizar()
+            self.lbl_status.configure(
+                text="Evento atualizado — clique em Atualizar para ver a lista."
+            )
             self.app.refresh_detalhes()
         else:
             _erro_api(resp)
@@ -882,7 +902,9 @@ class EventoRiscoTab(tk.Frame):
             _erro_conexao(erro)
             return
         if resp.status_code == 200:
-            self.atualizar()
+            self.lbl_status.configure(
+                text="Evento excluído — clique em Atualizar para ver a lista."
+            )
             self.app.refresh_detalhes()
         else:
             _erro_api(resp)
@@ -918,6 +940,15 @@ class DadosTab(tk.Frame):
     def _trocar(self, _event):
         # Carrega apenas na primeira visita à aba; depois disso, a atualização
         # é feita manualmente pelo botão "Atualizar".
+        self.carregar_inicial()
+
+    def carregar_inicial(self):
+        """Carrega a aba atual apenas se ela ainda não foi visitada.
+
+        Usado pelo ``recarregar_rotas`` (que precisa refletir rotas novas no
+        combo global) sem forçar o recarregamento da tabela: as tabelas de
+        Dados só atualizam no botão "Atualizar" ou na primeira visita.
+        """
         aba = self._aba_atual()
         if aba not in self._carregadas:
             aba.atualizar()
@@ -1143,14 +1174,19 @@ class DashboardTab(tk.Frame):
 # =========================================================================
 class GraficoTab(tk.Frame):
 
+    # Rótulo do seletor "Painel" -> modo interno de desenho.
+    MODOS = {"Todos": "todos", "Velocidade": "velocidade",
+             "Força G": "forca_g", "RPM": "rpm"}
+
     def __init__(self, master, app):
         super().__init__(master, bg=BG)
         self.app = app
         self._pontos = []
+        self._dados = None       # (nome, pontos, limiares) em cache p/ trocar painel sem HTTP
+        self._modo = "todos"
+        self._ax_ativo = None
+        self.ax_vel = self.ax_fg = self.ax_rpm = None
         self.figure = Figure(figsize=(7.2, 6.0), dpi=100, facecolor=BG)
-        self.ax_vel = self.figure.add_subplot(311)
-        self.ax_fg = self.figure.add_subplot(312, sharex=self.ax_vel)
-        self.ax_rpm = self.figure.add_subplot(313, sharex=self.ax_vel)
         self.canvas = FigureCanvasTkAgg(self.figure, master=self)
         self._tooltip = None
         self._build()
@@ -1165,12 +1201,40 @@ class GraficoTab(tk.Frame):
         self.canvas.mpl_connect("motion_notify_event", self._on_hover)
         self.plotar()
 
+    # ------------------------------------------------------------------ #
+    # Seleção de painel (chamada pelo seletor "Painel" da barra superior)
+    # ------------------------------------------------------------------ #
+    def definir_modo(self, rotulo):
+        """Troca entre "Todos" e um painel único, sem nova chamada à API."""
+        modo = self.MODOS.get(rotulo, "todos")
+        if modo == self._modo:
+            return
+        self._modo = modo
+        self._montar_eixos()
+        if self._dados is not None:
+            self._desenhar(*self._dados)
+        else:
+            self.plotar()
+
+    def _montar_eixos(self):
+        """Recria os eixos conforme o modo (um único ou três empilhados)."""
+        self.figure.clear()
+        self._tooltip = None
+        self.ax_vel = self.ax_fg = self.ax_rpm = None
+        if self._modo == "todos":
+            self.ax_vel = self.figure.add_subplot(311)
+            self.ax_fg = self.figure.add_subplot(312, sharex=self.ax_vel)
+            self.ax_rpm = self.figure.add_subplot(313, sharex=self.ax_vel)
+            self._ax_ativo = self.ax_vel
+        else:
+            self.ax_vel = self.figure.add_subplot(111)
+            self._ax_ativo = self.ax_vel
+
     def plotar(self):
         rota_id = self.app.rota_atual_id
-        for eixo in (self.ax_vel, self.ax_fg, self.ax_rpm):
-            eixo.clear()
+        self._dados = None
         self._pontos = []
-        self._tooltip = None
+        self._montar_eixos()
 
         if not rota_id:
             self._mostrar_mensagem(
@@ -1192,12 +1256,17 @@ class GraficoTab(tk.Frame):
         self.app.carregar_async(carregar, self._render)
 
     def _mostrar_mensagem(self, texto, cor):
-        self.ax_fg.set_visible(False)
-        self.ax_rpm.set_visible(False)
-        self.ax_vel.text(0.5, 0.5, texto, ha="center", va="center", fontsize=12,
-                         color=cor, transform=self.ax_vel.transAxes)
-        self.ax_vel.set_xticks([])
-        self.ax_vel.set_yticks([])
+        eixo = self._ax_ativo
+        if eixo is None:
+            return
+        for outro in (self.ax_fg, self.ax_rpm):
+            if outro is not None:
+                outro.set_visible(False)
+        eixo.set_visible(True)
+        eixo.text(0.5, 0.5, texto, ha="center", va="center", fontsize=12,
+                  color=cor, transform=eixo.transAxes)
+        eixo.set_xticks([])
+        eixo.set_yticks([])
         self.canvas.draw()
 
     def _render(self, resultado):
@@ -1207,70 +1276,36 @@ class GraficoTab(tk.Frame):
         rota_id, resp, resp_limiares = resultado
         if rota_id != self.app.rota_atual_id:
             return
-        # Limpa os eixos para remover a mensagem "Analisando a rota…" (que
-        # ficaria como marca d'água atrás das linhas).
-        for eixo in (self.ax_vel, self.ax_fg, self.ax_rpm):
-            eixo.clear()
-        self.ax_fg.set_visible(True)
-        self.ax_rpm.set_visible(True)
+        # Recria os eixos no modo atual (também remove a mensagem "Analisando…",
+        # que ficaria como marca d'água atrás das linhas).
+        self._montar_eixos()
         if resp.status_code != 200:
             self._mostrar_mensagem(extract_error(resp), "#d63031")
             return
 
         dados = resp.json()
         pontos = dados["pontos"]
-        self._pontos = pontos
-        tempos = [p["tempo"] for p in pontos]
-        velocidades = [p["velocidade"] if p["velocidade"] is not None else 0.0 for p in pontos]
-        forcas = [p["forca_g"] if p["forca_g"] is not None else 0.0 for p in pontos]
-        rpms = [p["rpm"] if p["rpm"] is not None else 0.0 for p in pontos]
         limiares = resp_limiares.json() if resp_limiares.status_code == 200 else {}
+        self._dados = (dados["nome"], pontos, limiares)
+        self._desenhar(dados["nome"], pontos, limiares)
 
-        # Painel 1 — velocidade + pontos de risco coloridos.
-        self.ax_vel.plot(tempos, velocidades, color="#0984e3", linewidth=1.3,
-                         label="Velocidade (km/h)")
-        if limiares.get("velocidade_max") is not None:
-            self.ax_vel.axhline(y=limiares["velocidade_max"], color="#f39c12",
-                                linestyle="--", linewidth=1.1,
-                                label=f"Limite {limiares['velocidade_max']:.0f} km/h")
-        por_tipo = {}
-        for ponto in pontos:
-            if ponto["risco"] and ponto["classificacoes"]:
-                tipo = tipo_principal(ponto["classificacoes"])
-                por_tipo.setdefault(tipo, []).append((ponto["tempo"], ponto["velocidade"]))
-        for tipo, lista in por_tipo.items():
-            if lista:
-                t, v = zip(*lista)
-                self.ax_vel.scatter(t, v, color=CORES_TIPO.get(tipo, "#d63031"),
-                                    s=28, zorder=5, label=tipo)
-        self.ax_vel.set_ylabel("Velocidade (km/h)")
-        self.ax_vel.set_title(dados["nome"], fontsize=11)
-        self.ax_vel.legend(loc="upper right", fontsize="x-small", ncol=2)
-        self.ax_vel.grid(True, linestyle="--", alpha=0.4)
+    def _desenhar(self, nome, pontos, limiares):
+        self._pontos = pontos
+        if self._modo == "todos":
+            self._desenhar_velocidade(self.ax_vel, nome, pontos, limiares)
+            self._desenhar_forca_g(self.ax_fg, pontos, limiares)
+            self._desenhar_rpm(self.ax_rpm, pontos, limiares)
+        elif self._modo == "velocidade":
+            self._desenhar_velocidade(self.ax_vel, nome, pontos, limiares)
+            self.ax_vel.set_xlabel("Tempo (s)")
+        elif self._modo == "forca_g":
+            self._desenhar_forca_g(self.ax_vel, pontos, limiares)
+            self.ax_vel.set_xlabel("Tempo (s)")
+        else:  # rpm
+            self._desenhar_rpm(self.ax_vel, pontos, limiares)
+            self.ax_vel.set_xlabel("Tempo (s)")
 
-        # Painel 2 — Força G resultante + limiar lateral.
-        self.ax_fg.plot(tempos, forcas, color="#e17055", linewidth=1.2,
-                        label="Força G resultante (m/s²)")
-        if limiares.get("lateral_max") is not None:
-            self.ax_fg.axhline(y=limiares["lateral_max"], color="#d63031",
-                               linestyle="--", linewidth=1.1,
-                               label=f"Limite lateral {limiares['lateral_max']:.1f} m/s²")
-        self.ax_fg.set_ylabel("Força G (m/s²)")
-        self.ax_fg.legend(loc="upper right", fontsize="x-small")
-        self.ax_fg.grid(True, linestyle="--", alpha=0.4)
-
-        # Painel 3 — RPM + limiar.
-        self.ax_rpm.plot(tempos, rpms, color="#6c5ce7", linewidth=1.2, label="RPM")
-        if limiares.get("rpm_max") is not None:
-            self.ax_rpm.axhline(y=limiares["rpm_max"], color="#e84393",
-                                linestyle="--", linewidth=1.1,
-                                label=f"Limite {limiares['rpm_max']:.0f} RPM")
-        self.ax_rpm.set_ylabel("RPM")
-        self.ax_rpm.set_xlabel("Tempo (s)")
-        self.ax_rpm.legend(loc="upper right", fontsize="x-small")
-        self.ax_rpm.grid(True, linestyle="--", alpha=0.4)
-
-        self._tooltip = self.ax_vel.annotate(
+        self._tooltip = self._ax_ativo.annotate(
             "", xy=(0, 0), xytext=(10, 10), textcoords="offset points",
             bbox=dict(boxstyle="round,pad=0.4", fc="white", ec=BORDA),
             fontsize=8, arrowprops=dict(arrowstyle="->", color=CINZA),
@@ -1281,8 +1316,58 @@ class GraficoTab(tk.Frame):
         self.figure.tight_layout()
         self.canvas.draw()
 
+    def _desenhar_velocidade(self, eixo, nome, pontos, limiares):
+        tempos = [p["tempo"] for p in pontos]
+        velocidades = [p["velocidade"] if p["velocidade"] is not None else 0.0 for p in pontos]
+        eixo.plot(tempos, velocidades, color="#0984e3", linewidth=1.3,
+                  label="Velocidade (km/h)")
+        if limiares.get("velocidade_max") is not None:
+            eixo.axhline(y=limiares["velocidade_max"], color="#f39c12",
+                         linestyle="--", linewidth=1.1,
+                         label=f"Limite {limiares['velocidade_max']:.0f} km/h")
+        por_tipo = {}
+        for ponto in pontos:
+            if ponto["risco"] and ponto["classificacoes"]:
+                tipo = tipo_principal(ponto["classificacoes"])
+                por_tipo.setdefault(tipo, []).append((ponto["tempo"], ponto["velocidade"]))
+        for tipo, lista in por_tipo.items():
+            if lista:
+                t, v = zip(*lista)
+                eixo.scatter(t, v, color=CORES_TIPO.get(tipo, "#d63031"),
+                             s=28, zorder=5, label=tipo)
+        eixo.set_ylabel("Velocidade (km/h)")
+        eixo.set_title(nome, fontsize=11)
+        eixo.legend(loc="upper right", fontsize="x-small", ncol=2)
+        eixo.grid(True, linestyle="--", alpha=0.4)
+
+    def _desenhar_forca_g(self, eixo, pontos, limiares):
+        tempos = [p["tempo"] for p in pontos]
+        forcas = [p["forca_g"] if p["forca_g"] is not None else 0.0 for p in pontos]
+        limite_fg = limiares.get("forca_g_max", limiares.get("lateral_max"))
+        eixo.plot(tempos, forcas, color="#e17055", linewidth=1.2,
+                  label="Força G resultante (m/s²)")
+        if limite_fg is not None:
+            eixo.axhline(y=limite_fg, color="#d63031",
+                         linestyle="--", linewidth=1.1,
+                         label=f"Limite Força G {limite_fg:.1f} m/s²")
+        eixo.set_ylabel("Força G (m/s²)")
+        eixo.legend(loc="upper right", fontsize="x-small")
+        eixo.grid(True, linestyle="--", alpha=0.4)
+
+    def _desenhar_rpm(self, eixo, pontos, limiares):
+        tempos = [p["tempo"] for p in pontos]
+        rpms = [p["rpm"] if p["rpm"] is not None else 0.0 for p in pontos]
+        eixo.plot(tempos, rpms, color="#6c5ce7", linewidth=1.2, label="RPM")
+        if limiares.get("rpm_max") is not None:
+            eixo.axhline(y=limiares["rpm_max"], color="#e84393",
+                         linestyle="--", linewidth=1.1,
+                         label=f"Limite {limiares['rpm_max']:.0f} RPM")
+        eixo.set_ylabel("RPM")
+        eixo.legend(loc="upper right", fontsize="x-small")
+        eixo.grid(True, linestyle="--", alpha=0.4)
+
     def _on_hover(self, event):
-        if self._tooltip is None or not self._pontos or event.inaxes is not self.ax_vel:
+        if self._tooltip is None or not self._pontos or event.inaxes is not self._ax_ativo:
             if self._tooltip is not None and self._tooltip.get_visible():
                 self._tooltip.set_visible(False)
                 self.canvas.draw_idle()
@@ -1298,7 +1383,14 @@ class GraficoTab(tk.Frame):
         )
         if ponto["classificacoes"]:
             texto += "\nRisco: " + ", ".join(sorted(set(ponto["classificacoes"])))
-        self._tooltip.xy = (ponto["tempo"], ponto["velocidade"] or 0)
+        # Âncora do tooltip no valor do canal exibido no painel atual.
+        if self._modo == "forca_g":
+            y = ponto["forca_g"] or 0
+        elif self._modo == "rpm":
+            y = ponto["rpm"] or 0
+        else:
+            y = ponto["velocidade"] or 0
+        self._tooltip.xy = (ponto["tempo"], y)
         self._tooltip.set_text(texto)
         self._tooltip.set_visible(True)
         self.canvas.draw_idle()
