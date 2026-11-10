@@ -50,7 +50,6 @@ Trabalho_PAV/
 │
 └── apresentacao/           # Apresentação (slides)
     ├── gerar_slides.py     # Gera o arquivo slides_pav.pptx
-    ├── roteiro-apresentacao.md
     ├── imgs/               # Capturas de tela usadas nos slides
     └── slides_pav.pptx
 ```
@@ -267,5 +266,4 @@ python test_limpeza.py    # testes unitários da limpeza
 
 ## Documentação
 
-- **[Roteiro da apresentação](apresentacao/roteiro-apresentacao.md)** — mapeamento dos 10 itens exigidos.
 - **Slides** — gere com `cd apresentacao && python gerar_slides.py` (saída `slides_pav.pptx`).
