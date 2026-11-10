@@ -9,6 +9,8 @@ As regras evitam que ruído de sensor vire evento falso:
 A limpeza não divide a rota em sub-rotas por gaps de tempo: a rota continua
 sendo a viagem inteira, como definido no modelo de dados.
 """
+import math
+
 LIMITE_ACELERACAO = 5.0      # m/s²
 VELOCIDADE_MAXIMA = 200.0    # km/h
 VELOCIDADE_PARADO = 1.0      # km/h
@@ -25,10 +27,20 @@ def limpar_leituras(registros: list) -> tuple:
     acelerometro_ajustado = 0
     velocidade_removida = 0
     paradas_removidas = 0
+    valores_invalidos = 0
     parados_consecutivos = 0
 
     for registro in registros:
         dados = dict(registro)
+
+        # 0) Valores não finitos (NaN/Infinity) tornam a leitura inválida:
+        # descarta a linha inteira e contabiliza no relatório.
+        if any(
+            isinstance(v, float) and not math.isfinite(v)
+            for v in dados.values()
+        ):
+            valores_invalidos += 1
+            continue
 
         # 1) Clip dos spikes do acelerômetro.
         for canal in ("accel_x", "accel_y", "accel_z"):
@@ -58,6 +70,7 @@ def limpar_leituras(registros: list) -> tuple:
         "acelerometro_ajustado": acelerometro_ajustado,
         "velocidade_removida": velocidade_removida,
         "paradas_removidas": paradas_removidas,
-        "total_removido": velocidade_removida + paradas_removidas,
+        "valores_invalidos": valores_invalidos,
+        "total_removido": velocidade_removida + paradas_removidas + valores_invalidos,
     }
     return limpos, relatorio

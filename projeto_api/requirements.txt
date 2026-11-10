@@ -7,5 +7,5 @@ webargs==8.7.1
 apispec==6.10.0
 SQLAlchemy==2.0.39
 psycopg2-binary==2.9.13
-numpy
+numpy==2.2.6
 scikit-learn==1.6.1

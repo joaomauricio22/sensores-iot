@@ -4,7 +4,8 @@ Abre a janela Tkinter com dados sintéticos de telemetria, fotografa cada
 seção e deixa duas rotas de exemplo no banco para facilitar a demonstração.
 
 Executar (com a API no ar):
-    python capturar_telas.py
+    python capturar_telas.py          # pede confirmação antes de apagar rotas
+    python capturar_telas.py --sim    # pula a confirmação (útil em CI)
 """
 import math
 import os
@@ -131,11 +132,17 @@ def main():
     api = ApiClient()
 
     # Estado de demonstração consistente: remove rotas antigas e importa duas
-    # rotas sintéticas com perfis de condução distintos.
+    # rotas sintéticas com perfis de condução distintos. Como apagar é uma ação
+    # destrutiva, pede confirmação (a menos que --sim seja passado).
     resp = api.list_rotas()
-    if resp.status_code == 200:
-        for rota in resp.json():
-            api.excluir_rota(rota["id"])
+    rotas_existentes = resp.json() if resp.status_code == 200 else []
+    if rotas_existentes and "--sim" not in sys.argv:
+        print(f"Atenção: {len(rotas_existentes)} rota(s) existente(s) serão EXCLUÍDAS.")
+        if input("Digite 'sim' para continuar (ou Ctrl+C para cancelar): ").strip().lower() != "sim":
+            print("Cancelado.")
+            return
+    for rota in rotas_existentes:
+        api.excluir_rota(rota["id"])
 
     # Ambos os trajetos compartilham os mesmos tipos de evento (para que o
     # modelo de ML os considere "típicos" entre si), variando a intensidade.

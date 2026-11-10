@@ -1,4 +1,4 @@
-"""Gera os slides da apresentação (Parte 6) em formato PowerPoint (.pptx).
+"""Gera os slides da apresentação em formato PowerPoint (.pptx).
 
 Tema único (dark/navy). Domínio: telemetria veicular (OBD-II) e detecção de risco.
 

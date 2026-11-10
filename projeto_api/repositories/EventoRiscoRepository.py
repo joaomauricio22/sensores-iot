@@ -33,3 +33,34 @@ class EventoRiscoRepository:
         db.session.delete(evento)
         db.session.commit()
         return evento
+
+    def delete_por_leitura(self, leitura_id, preservar_manual=True) -> int:
+        """Remove os eventos de uma leitura (usado ao editar a leitura).
+
+        Por padrão preserva os eventos cadastrados manualmente (``metodo ==
+        "MANUAL"``): eles foram inseridos pelo usuário no CRUD e não devem ser
+        apagados quando a leitura tem um valor corrigido. Os eventos gerados
+        pelos detectores são removidos porque ficam obsoletos.
+        """
+        query = db.session.query(EventoRisco).filter(EventoRisco.leitura_id == leitura_id)
+        if preservar_manual:
+            query = query.filter(EventoRisco.metodo != "MANUAL")
+        return query.delete(synchronize_session=False)
+
+    def mover_eventos_manuais(self, leitura_id, rota_id, data_hora) -> int:
+        """Atualiza rota/data dos eventos manuais quando a leitura muda de rota.
+
+        Um evento manual pertence à leitura; se a leitura for movida para outra
+        rota (ou tiver a data/hora alterada), o evento deve acompanhá-la.
+        """
+        return (
+            db.session.query(EventoRisco)
+            .filter(
+                EventoRisco.leitura_id == leitura_id,
+                EventoRisco.metodo == "MANUAL",
+            )
+            .update(
+                {"rota_id": rota_id, "data_hora": data_hora},
+                synchronize_session=False,
+            )
+        )

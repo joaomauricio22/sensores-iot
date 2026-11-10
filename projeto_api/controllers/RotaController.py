@@ -161,9 +161,14 @@ class RotaComparar(MethodResource, Resource):
         try:
             dados = request.get_json(silent=True) or {}
             rota_ids = dados.get("rota_ids")
-            if not rota_ids or not isinstance(rota_ids, list):
-                abort(400, message="Informe a lista 'rota_ids' para comparação.")
+            if not isinstance(rota_ids, list) or not (2 <= len(rota_ids) <= 5):
+                abort(400, message="Informe de 2 a 5 ids em 'rota_ids' para comparação.")
+            if not all(isinstance(i, int) and not isinstance(i, bool) for i in rota_ids):
+                abort(400, message="Os ids de 'rota_ids' devem ser números inteiros.")
             resumos = self.__analise.comparar_rotas(rota_ids)
+            ausentes = [i for i in rota_ids if all(r["rota_id"] != i for r in resumos)]
+            if ausentes:
+                abort(400, message=f"Rota(s) não encontrada(s): {ausentes}.")
             return {"rotas": resumos}, 200
         except OperationalError:
             abort(500, message="Erro interno do servidor.")

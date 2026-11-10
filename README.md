@@ -151,8 +151,9 @@ As 10 regras (texto original, conforme enviadas na Parte 1):
 | Comportamento atípico | z-score / modelo de ML |
 
 A Força G resultante é `√(ax² + ay²)`; a instabilidade é o desvio padrão da aceleração
-numa janela de ~3 s. O **score de segurança** (0–100) desconta pontos conforme a
-severidade dos eventos detectados.
+numa janela de ~3 s. O limiar da Força G resultante é `forca_g_max` (padrão 3,0 m/s²;
+quando ausente no JSON, usa `lateral_max`). O **score de segurança** (0–100) desconta
+pontos conforme a severidade dos eventos detectados.
 
 > **Limitação do score:** a penalidade é contada por evento (não normalizada por
 > distância/duração). Rotas muito longas tendem a acumular mais eventos e, portanto, a
@@ -166,17 +167,24 @@ uma leitura é criada, editada ou excluída (o campo é invalidado por
 `LeituraService.__invalidar_analise`).
 
 - **Análise automática** (`resumo`/`gráfico`): acrescenta apenas os eventos novos,
-  preservando os já existentes — inclusive os cadastrados manualmente via CRUD.
+  preservando os já existentes — inclusive os cadastrados manualmente via CRUD
+  (método `MANUAL`). Quando uma leitura é editada, os eventos gerados pelos
+  detectores sobre aquela leitura são removidos (ficam obsoletos) e a rota é
+  reanalisada.
 - **Reanálise forçada** (`POST /rotas/<id>/analisar`, botão "Reanalisar" ou
-  `python reanalisar.py`): apaga os eventos e os regenera do zero — útil após editar
-  `config/limiares.json` ou corrigir uma leitura.
+  `python reanalisar.py`): regenera os eventos dos detectores do zero, **preservando
+  os eventos manuais** — útil após editar `config/limiares.json` ou corrigir uma leitura.
+- **Concorrência:** a análise usa um bloqueio por rota (`SELECT ... FOR UPDATE`),
+  então requisições simultâneas de resumo/gráfico não duplicam eventos.
 
 ### Limpeza na importação
 
 Antes de persistir, o importador:
 - limita a aceleração de cada eixo a ±5 m/s² (spikes fisicamente improváveis);
 - descarta leituras com velocidade acima de 200 km/h;
-- mantém no máximo 3 leituras consecutivas com o veículo parado.
+- mantém no máximo 3 leituras consecutivas com o veículo parado;
+- descarta linhas com valores não numéricos (`NaN`/`Infinity`), contabilizadas
+  no relatório (`valores_invalidos`).
 
 A rota **não é dividida** por intervalos de tempo: é a viagem inteira.
 

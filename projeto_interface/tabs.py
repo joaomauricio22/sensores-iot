@@ -45,7 +45,7 @@ CORES_TIPO = {
     "Comportamento atípico": "#636e72",
 }
 
-METODOS = ["LIMITE", "ESTATISTICO", "MODELO_ML"]
+METODOS = ["MANUAL", "LIMITE", "ESTATISTICO", "MODELO_ML"]
 CANAIS_ESPECIAIS = ["geral", "forca_g", "multivariado"]
 
 
@@ -98,20 +98,40 @@ def formatar_duracao(segundos):
 
 
 def _para_iso(texto):
-    """Converte o texto digitado para o formato ISO aceito pela API."""
+    """Converte o texto digitado para o formato ISO aceito pela API.
+
+    Aceita frações de segundo (necessário para leituras coletadas em passos
+    menores que 1 s, ex.: ``08:00:00.500000``), opcionais.
+    """
     texto = (texto or "").strip()
-    for formato in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%d/%m/%Y %H:%M:%S"):
+    for formato in (
+        "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S.%f",
+        "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S",
+        "%d/%m/%Y %H:%M:%S.%f", "%d/%m/%Y %H:%M:%S",
+    ):
         try:
             return datetime.strptime(texto, formato).isoformat()
         except ValueError:
             continue
-    raise ValueError("Use o formato AAAA-MM-DD HH:MM:SS.")
+    raise ValueError("Use o formato AAAA-MM-DD HH:MM:SS (frações de segundo são opcionais).")
 
 
 def _para_exibicao(data_hora):
     if not data_hora:
         return ""
     return data_hora.replace("T", " ").split(".")[0].split("+")[0]
+
+
+def _para_edicao(data_hora):
+    """Formata a data/hora para o campo de edição, preservando a fração de segundo.
+
+    ``_para_exibicao`` trunca os microssegundos para exibição na tabela; aqui
+    mantemos a precisão, senão editar uma leitura coletada em passo de 0,5 s
+    tentaria salvar o instante truncado (que já existe) e falharia.
+    """
+    if not data_hora:
+        return ""
+    return data_hora.replace("T", " ").split("+")[0]
 
 
 def _so_hora(data_hora):
@@ -129,7 +149,7 @@ def _rota_do_combo(app, combo):
     Usado pelos filtros das abas Leituras e Eventos (índice 0 = \"Todas\").
     """
     indice = combo.current()
-    if indice <= 0:
+    if indice <= 0 or indice - 1 >= len(app.rotas):
         return None
     return app.rotas[indice - 1]["id"]
 
@@ -219,7 +239,7 @@ class FormDialog(tk.Toplevel):
                 atual = self.valores.get(chave)
                 if atual is not None:
                     if tipo == "datahora":
-                        atual = _para_exibicao(atual)
+                        atual = _para_edicao(atual)
                     widget.insert(0, str(atual))
             (container or widget).grid(row=linha, column=1, sticky="ew", pady=5)
             self.widgets[chave] = widget
@@ -774,11 +794,21 @@ class EventoRiscoTab(tk.Frame):
             return None
         return int(self.tree.item(selecao[0])["values"][0])
 
-    def _campos(self):
+    def _campos(self, leitura_extra=None):
         opcoes_leitura = [
             (f"#{l['id']} — rota {l['rota_id']} — {_para_exibicao(l['data_hora'])}", l["id"])
             for l in self.leituras
         ]
+        # Ao editar com o filtro "Todas", a leitura do evento pode não estar em
+        # self.leituras; inclui a leitura atual do evento para o combo não vir vazio.
+        if leitura_extra is not None and all(
+            l["id"] != leitura_extra["leitura_id"] for l in self.leituras
+        ):
+            opcoes_leitura.insert(0, (
+                f"#{leitura_extra['leitura_id']} — rota {leitura_extra['rota_id']} — "
+                f"{_para_exibicao(leitura_extra['data_hora'])}",
+                leitura_extra["leitura_id"],
+            ))
         canais = self.sensores + [c for c in CANAIS_ESPECIAIS if c not in self.sensores]
         return [
             {"chave": "leitura_id", "rotulo": "Leitura", "tipo": "combo",
@@ -820,16 +850,13 @@ class EventoRiscoTab(tk.Frame):
         evento_id = self._get_selecionada()
         if evento_id is None:
             return
-        if not self.leituras:
-            messagebox.showwarning(
-                "Aviso",
-                "Selecione uma rota no filtro acima para editar o evento.",
-            )
-            return
         evento = next((e for e in self.eventos if e["id"] == evento_id), None)
         if evento is None:
             return
-        dialogo = FormDialog(self, "Editar evento de risco", self._campos(), valores=evento)
+        dialogo = FormDialog(
+            self, "Editar evento de risco",
+            self._campos(leitura_extra=evento), valores=evento,
+        )
         if dialogo.resultado is None:
             return
         try:
@@ -983,9 +1010,16 @@ class DashboardTab(tk.Frame):
         self.app.carregar_async(carregar, self._render)
 
     def reanalisar(self):
-        """Força a reanálise da rota atual (apaga e reexecuta os detectores)."""
+        """Força a reanálise da rota atual (refaz os detectores, mantém manuais)."""
         rota_id = self.app.rota_atual_id
         if not rota_id:
+            return
+        if not messagebox.askyesno(
+            "Confirmar reanálise",
+            "Refazer a detecção de eventos desta rota?\n\n"
+            "Os eventos gerados automaticamente serão recalculados; "
+            "eventos cadastrados manualmente são preservados.",
+        ):
             return
         self.var_score.set("…")
         self.lbl_score.configure(fg=TEXTO)
@@ -1401,13 +1435,12 @@ class SensorTab(tk.Frame):
                     n += 1
             return n
 
-        total = len(pontos)
-
-        def pct(n):
+        def pct(n, valores):
+            total = sum(1 for v in valores if v is not None)
             return (n / total * 100.0) if total else 0.0
 
         v_max = limiares.get("velocidade_max")
-        g_max = limiares.get("lateral_max")
+        g_max = limiares.get("forca_g_max", limiares.get("lateral_max"))
         r_max = limiares.get("rpm_max")
         a_max = limiares.get("aceleracao_max")
         f_max = limiares.get("frenagem_max")
@@ -1424,20 +1457,19 @@ class SensorTab(tk.Frame):
                 return f"{_fmt_num(lo, casas)} / {_fmt_num(hi, casas)}"
             return _fmt_num(hi if hi is not None else lo, casas)
 
+        def metrica(rotulo, valores, casas, lo, hi):
+            n = fora(valores, lo=lo, hi=hi)
+            return {
+                "rotulo": rotulo, "casas": casas, **stats(valores),
+                "limiar_texto": rotulo_limiar(lo, hi, casas),
+                "fora_n": n, "fora_pct": pct(n, valores),
+            }
+
         return [
-            {"rotulo": "Velocidade (km/h)", "casas": 1,
-             **stats(vel), "limiar_texto": rotulo_limiar(None, v_max),
-             "fora_n": fora(vel, hi=v_max), "fora_pct": pct(fora(vel, hi=v_max))},
-            {"rotulo": "Força G (m/s²)", "casas": 2,
-             **stats(fg), "limiar_texto": rotulo_limiar(None, g_max),
-             "fora_n": fora(fg, hi=g_max), "fora_pct": pct(fora(fg, hi=g_max))},
-            {"rotulo": "RPM", "casas": 0,
-             **stats(rpm), "limiar_texto": rotulo_limiar(None, r_max, 0),
-             "fora_n": fora(rpm, hi=r_max), "fora_pct": pct(fora(rpm, hi=r_max))},
-            {"rotulo": "Aceleração long. (m/s²)", "casas": 2,
-             **stats(acel), "limiar_texto": rotulo_limiar(f_max, a_max, 1),
-             "fora_n": fora(acel, lo=f_max, hi=a_max),
-             "fora_pct": pct(fora(acel, lo=f_max, hi=a_max))},
+            metrica("Velocidade (km/h)", vel, 1, None, v_max),
+            metrica("Força G (m/s²)", fg, 2, None, g_max),
+            metrica("RPM", rpm, 0, None, r_max),
+            metrica("Aceleração long. (m/s²)", acel, 2, f_max, a_max),
         ]
 
     def _desenhar_barras(self, metricas):
@@ -1467,6 +1499,8 @@ class CompararTab(tk.Frame):
         super().__init__(master, bg=BG)
         self.app = app
         self.tree = None
+        self._ida = None
+        self._idb = None
         self._build()
 
     def _build(self):
@@ -1478,10 +1512,12 @@ class CompararTab(tk.Frame):
                  font=("Segoe UI", 10, "bold")).pack(side="left", padx=4)
         self.combo_a = ttk.Combobox(selecao, state="readonly", width=28)
         self.combo_a.pack(side="left", padx=4)
+        self.combo_a.bind("<<ComboboxSelected>>", lambda _e: self._marcar_selecao("a"))
         tk.Label(selecao, text="Rota B:", bg=BG, fg=TEXTO,
                  font=("Segoe UI", 10, "bold")).pack(side="left", padx=4)
         self.combo_b = ttk.Combobox(selecao, state="readonly", width=28)
         self.combo_b.pack(side="left", padx=4)
+        self.combo_b.bind("<<ComboboxSelected>>", lambda _e: self._marcar_selecao("b"))
         _botao(selecao, "Comparar", "#6c5ce7", self.comparar, width=12).pack(
             side="left", padx=6)
 
@@ -1501,9 +1537,26 @@ class CompararTab(tk.Frame):
         nomes = [_rotulo_rota(r) for r in self.app.rotas]
         self.combo_a["values"] = nomes
         self.combo_b["values"] = nomes
-        if nomes:
-            self.combo_a.current(0)
-            self.combo_b.current(1 if len(nomes) > 1 else 0)
+        # Preserva a seleção anterior (por id) sempre que possível.
+        self._selecionar_por_id(self.combo_a, self._ida, 0)
+        self._selecionar_por_id(self.combo_b, self._idb, 1)
+
+    def _marcar_selecao(self, qual):
+        combo = self.combo_a if qual == "a" else self.combo_b
+        valor = self._rota_id(combo)
+        if qual == "a":
+            self._ida = valor
+        else:
+            self._idb = valor
+
+    def _selecionar_por_id(self, combo, rota_id, padrao):
+        if rota_id is not None:
+            for indice, rota in enumerate(self.app.rotas):
+                if rota["id"] == rota_id:
+                    combo.current(indice)
+                    return
+        if self.app.rotas:
+            combo.current(padrao if padrao < len(self.app.rotas) else 0)
 
     def _rota_id(self, combo):
         indice = combo.current()

@@ -5,6 +5,7 @@
     "aceleracao_max": 2.5,
     "frenagem_max": -3.0,
     "lateral_max": 3.0,
+    "forca_g_max": 3.0,
     "curva_velocidade_min": 30.0,
     "acelerador_delta_max": 15.0,
     "zscore_max": 3.0

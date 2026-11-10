@@ -56,6 +56,13 @@ class ApiClient:
 
     BASE_URL = "http://localhost:8080/telemetria"
 
+    # Timeouts por tipo de operação (segundos). Evita a interface travar quando
+    # a API não responde.
+    TIMEOUT_PADRAO = 30
+    TIMEOUT_RAPIDO = 5
+    TIMEOUT_ANALISE = 120
+    TIMEOUT_IMPORTACAO = 180
+
     def __init__(self, base_url: str = None):
         self.__base_url = base_url or self.BASE_URL
 
@@ -67,6 +74,22 @@ class ApiClient:
             url += f"/{extra}"
         return url
 
+    def _get(self, url, **kw):
+        kw.setdefault("timeout", self.TIMEOUT_PADRAO)
+        return requests.get(url, **kw)
+
+    def _post(self, url, **kw):
+        kw.setdefault("timeout", self.TIMEOUT_PADRAO)
+        return requests.post(url, **kw)
+
+    def _put(self, url, **kw):
+        kw.setdefault("timeout", self.TIMEOUT_PADRAO)
+        return requests.put(url, **kw)
+
+    def _delete(self, url, **kw):
+        kw.setdefault("timeout", self.TIMEOUT_PADRAO)
+        return requests.delete(url, **kw)
+
     def disponivel(self, timeout=2) -> bool:
         """Verifica rapidamente se a API está no ar (conexão e resposta 200)."""
         try:
@@ -76,38 +99,45 @@ class ApiClient:
 
     # ---- Rotas --------------------------------------------------------- #
     def list_rotas(self):
-        return requests.get(self._url("rotas"))
+        return self._get(self._url("rotas"), timeout=self.TIMEOUT_RAPIDO)
 
     def atualizar_rota(self, rota_id, nome, arquivo_origem=None):
-        return requests.put(
+        return self._put(
             self._url("rotas", rota_id),
             json={"nome": nome, "arquivo_origem": arquivo_origem},
         )
 
     def excluir_rota(self, rota_id):
-        return requests.delete(self._url("rotas", rota_id))
+        return self._delete(self._url("rotas", rota_id))
 
     def importar_csv(self, nome, arquivo_origem, conteudo_csv):
-        return requests.post(
+        return self._post(
             self._url("rotas", extra="importar"),
             json={
                 "nome": nome,
                 "arquivo_origem": arquivo_origem,
                 "conteudo_csv": conteudo_csv,
             },
+            timeout=self.TIMEOUT_IMPORTACAO,
         )
 
     def analisar_rota(self, rota_id):
-        return requests.post(self._url("rotas", rota_id, "analisar"))
+        return self._post(
+            self._url("rotas", rota_id, "analisar"), timeout=self.TIMEOUT_ANALISE
+        )
 
     def grafico_rota(self, rota_id):
-        return requests.get(self._url("rotas", rota_id, "grafico"))
+        return self._get(
+            self._url("rotas", rota_id, "grafico"), timeout=self.TIMEOUT_ANALISE
+        )
 
     def resumo_rota(self, rota_id):
-        return requests.get(self._url("rotas", rota_id, "resumo"))
+        return self._get(
+            self._url("rotas", rota_id, "resumo"), timeout=self.TIMEOUT_ANALISE
+        )
 
     def comparar_rotas(self, rota_ids):
-        return requests.post(
+        return self._post(
             self._url("rotas", extra="comparar"), json={"rota_ids": rota_ids}
         )
 
@@ -116,16 +146,16 @@ class ApiClient:
         params = {}
         if rota_id is not None:
             params["rota_id"] = rota_id
-        return requests.get(self._url("leituras"), params=params)
+        return self._get(self._url("leituras"), params=params)
 
     def criar_leitura(self, dados):
-        return requests.post(self._url("leituras"), json=dados)
+        return self._post(self._url("leituras"), json=dados)
 
     def atualizar_leitura(self, leitura_id, dados):
-        return requests.put(self._url("leituras", leitura_id), json=dados)
+        return self._put(self._url("leituras", leitura_id), json=dados)
 
     def excluir_leitura(self, leitura_id):
-        return requests.delete(self._url("leituras", leitura_id))
+        return self._delete(self._url("leituras", leitura_id))
 
     # ---- Eventos de risco ---------------------------------------------- #
     def list_eventos(self, rota_id=None, tipo=None):
@@ -134,20 +164,20 @@ class ApiClient:
             params["rota_id"] = rota_id
         if tipo:
             params["tipo"] = tipo
-        return requests.get(self._url("eventos-risco"), params=params)
+        return self._get(self._url("eventos-risco"), params=params)
 
     def criar_evento(self, dados):
-        return requests.post(self._url("eventos-risco"), json=dados)
+        return self._post(self._url("eventos-risco"), json=dados)
 
     def atualizar_evento(self, evento_id, dados):
-        return requests.put(self._url("eventos-risco", evento_id), json=dados)
+        return self._put(self._url("eventos-risco", evento_id), json=dados)
 
     def excluir_evento(self, evento_id):
-        return requests.delete(self._url("eventos-risco", evento_id))
+        return self._delete(self._url("eventos-risco", evento_id))
 
     # ---- Configuração (somente leitura) -------------------------------- #
     def get_limiares(self):
-        return requests.get(self._url("limiares"))
+        return self._get(self._url("limiares"))
 
     def get_sensores(self):
-        return requests.get(self._url("sensores"))
+        return self._get(self._url("sensores"))

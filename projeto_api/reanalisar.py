@@ -1,8 +1,9 @@
 """Reanálise das rotas com os limiares atuais de `config/limiares.json`.
 
-Útil depois de alterar o JSON: apaga os eventos de risco existentes e executa
-novamente os três detectores (limite, estatístico e ML) sobre as leituras já
-armazenadas. Não altera rotas nem leituras.
+Útil depois de alterar o JSON: apaga os eventos gerados pelos detectores e
+executa novamente os três métodos (limite, estatístico e ML) sobre as leituras
+já armazenadas. Eventos cadastrados manualmente (método MANUAL) são
+preservados. Não altera rotas nem leituras.
 
 Uso:
     python reanalisar.py            # reanalisa todas as rotas

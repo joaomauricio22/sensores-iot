@@ -64,6 +64,17 @@ class TestLimpeza(unittest.TestCase):
         limpar_leituras([original])
         self.assertEqual(original["accel_x"], 9.0)
 
+    def test_descarta_valores_nao_finitos(self):
+        limpos, relatorio = limpar_leituras([
+            registro(0, velocidade=float("nan")),
+            registro(1, velocidade=50.0, accel_x=float("inf")),
+            registro(2, velocidade=60.0),
+        ])
+        self.assertEqual(len(limpos), 1)
+        self.assertEqual(limpos[0]["velocidade"], 60.0)
+        self.assertEqual(relatorio["valores_invalidos"], 2)
+        self.assertEqual(relatorio["total_removido"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

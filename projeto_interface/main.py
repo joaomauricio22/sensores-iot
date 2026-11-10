@@ -97,7 +97,6 @@ class App:
         self.secao_atual = None
 
         self.root.title("Sentinela — Telemetria e Segurança Veicular")
-        self.root.minsize(1080, 680)
         self.root.configure(bg=BG)
         self.__centralizar(1280, 800)
 
@@ -112,15 +111,21 @@ class App:
         self.mostrar("dados")
 
     def __centralizar(self, largura, altura):
-        """Posiciona a janela no centro da tela, mantendo o tamanho inicial.
+        """Posiciona a janela no centro da tela, reduzindo-a se for maior que a tela.
 
         Sem ``+X+Y`` no geometry, o gerenciador de janelas abre a aplicação no
         canto superior esquerdo. Aqui calculamos o deslocamento a partir da
-        resolução da tela para centralizá-la.
+        resolução da tela para centralizá-la e evitamos uma janela maior que a
+        área visível (ex.: notebooks 1366×768).
         """
         self.root.update_idletasks()  # garante dimensões reais da tela
-        pos_x = max(0, (self.root.winfo_screenwidth() - largura) // 2)
-        pos_y = max(0, (self.root.winfo_screenheight() - altura) // 2)
+        tela_l = self.root.winfo_screenwidth()
+        tela_a = self.root.winfo_screenheight()
+        largura = min(largura, tela_l - 60)
+        altura = min(altura, tela_a - 120)
+        self.root.minsize(min(1080, largura), min(680, altura))
+        pos_x = max(0, (tela_l - largura) // 2)
+        pos_y = max(0, (tela_a - altura) // 2)
         self.root.geometry(f"{largura}x{altura}+{pos_x}+{pos_y}")
 
     # ------------------------------------------------------------------ #
@@ -354,6 +359,9 @@ class App:
                 resultado = funcao()
             except requests.exceptions.RequestException as erro:
                 resultado = {"__erro__": mensagem_conexao(erro)}
+            except Exception as erro:  # noqa: BLE001 — a thread não pode morrer
+                print("Falha inesperada ao carregar dados:", erro)
+                resultado = {"__erro__": "Falha inesperada ao carregar os dados. Tente novamente."}
             self._fila.put((ao_concluir, resultado))
 
         threading.Thread(target=trabalho, daemon=True).start()

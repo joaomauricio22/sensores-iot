@@ -34,16 +34,16 @@ class LimiteDetector(DetectorAnomalia):
             if acel < limiares["frenagem_max"]:
                 eventos.append(self._evento(
                     leitura, "accel_x", acel, fg, inst, "Frenagem brusca",
-                    f"Desaceleração de {acel:.2f} m/s² "
-                    f"(limite: {limiares['frenagem_max']:.1f} m/s²).",
+                    f"Desaceleração de {acel:.2f} m/s² (derivada da velocidade; "
+                    f"limite: {limiares['frenagem_max']:.1f} m/s²).",
                 ))
 
             # Aceleração brusca: aceleração mais intensa que o limite.
             if acel > limiares["aceleracao_max"]:
                 eventos.append(self._evento(
                     leitura, "accel_x", acel, fg, inst, "Aceleração brusca",
-                    f"Aceleração de {acel:.2f} m/s² "
-                    f"(limite: {limiares['aceleracao_max']:.1f} m/s²).",
+                    f"Aceleração de {acel:.2f} m/s² (derivada da velocidade; "
+                    f"limite: {limiares['aceleracao_max']:.1f} m/s²).",
                 ))
 
             # Curva em alta velocidade: aceleração lateral forte com velocidade alta.

@@ -3,6 +3,7 @@ import math
 from marshmallow import ValidationError
 
 from entities.Leitura import Leitura
+from repositories.EventoRiscoRepository import EventoRiscoRepository
 from repositories.LeituraRepository import LeituraRepository
 from repositories.RotaRepository import RotaRepository
 
@@ -24,6 +25,7 @@ class LeituraService:
     def __init__(self):
         self.__repository = LeituraRepository()
         self.__rota_repository = RotaRepository()
+        self.__evento_repository = EventoRiscoRepository()
 
     def get_all(self):
         return self.__repository.get_all()
@@ -100,6 +102,13 @@ class LeituraService:
         leitura.data_hora = data_hora
         for campo, valor in valores.items():
             setattr(leitura, campo, valor)
+
+        # A leitura mudou: os eventos gerados pelos detectores ficam obsoletos
+        # (ex.: velocidade corrigida de 150 para 50 km/h) e são removidos. Os
+        # eventos manuais acompanham a leitura se ela mudou de rota ou instante.
+        self.__evento_repository.delete_por_leitura(leitura_id)
+        self.__evento_repository.mover_eventos_manuais(leitura_id, rota_id, data_hora)
+
         resultado = self.__repository.update(leitura)
         self.__invalidar_analise(rota_id)
         if rota_anterior != rota_id:

@@ -5,7 +5,7 @@ from repositories.EventoRiscoRepository import EventoRiscoRepository
 from repositories.LeituraRepository import LeituraRepository
 from services.LimiaresService import LimiaresService
 
-METODOS_VALIDOS = {"LIMITE", "ESTATISTICO", "MODELO_ML"}
+METODOS_VALIDOS = {"MANUAL", "LIMITE", "ESTATISTICO", "MODELO_ML"}
 CANAIS_ESPECIAIS = {"geral", "forca_g", "multivariado"}
 
 
@@ -102,7 +102,7 @@ class EventoRiscoService:
         metodo = str(metodo).strip()
         if metodo not in METODOS_VALIDOS:
             raise ValidationError(
-                "Método inválido. Use um destes: LIMITE, ESTATISTICO ou MODELO_ML."
+                "Método inválido. Use um destes: MANUAL, LIMITE, ESTATISTICO ou MODELO_ML."
             )
         return metodo
 

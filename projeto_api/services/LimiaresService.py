@@ -28,6 +28,10 @@ LIMIARES_OBRIGATORIOS = {
     "zscore_max",
 }
 
+# Limiares opcionais: podem existir no JSON, mas não são obrigatórios. Quando
+# ausentes, o código usa um padrão (ex.: ``forca_g_max`` cai em ``lateral_max``).
+LIMIARES_OPCIONAIS = {"forca_g_max"}
+
 SENSORES_OBRIGATORIOS = {
     "velocidade",
     "rpm",
@@ -104,7 +108,7 @@ class LimiaresService:
             raise ValidationError(
                 "Limiares ausentes no JSON: " + ", ".join(sorted(faltando)) + "."
             )
-        extras = set(limiares) - LIMIARES_OBRIGATORIOS
+        extras = set(limiares) - LIMIARES_OBRIGATORIOS - LIMIARES_OPCIONAIS
         if extras:
             raise ValidationError(
                 "Limiares desconhecidos no JSON: " + ", ".join(sorted(extras)) + "."
@@ -124,6 +128,8 @@ class LimiaresService:
             raise ValidationError("'frenagem_max' deve ser negativo.")
         if normalizados["lateral_max"] <= 0:
             raise ValidationError("'lateral_max' deve ser maior que zero.")
+        if normalizados.get("forca_g_max") is not None and normalizados["forca_g_max"] <= 0:
+            raise ValidationError("'forca_g_max' deve ser maior que zero.")
         if normalizados["curva_velocidade_min"] < 0:
             raise ValidationError("'curva_velocidade_min' não pode ser negativo.")
         if normalizados["acelerador_delta_max"] <= 0:

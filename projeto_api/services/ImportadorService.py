@@ -20,7 +20,7 @@ MAPEAMENTO_PADRAO = {
     "Engine RPM (RPM)": "rpm",
     "Aceleração X (m/s²)": "accel_x",
     "Accel X (m/s²)": "accel_x",
-    "Acelere Y (m/s²)": "accel_y",
+    "Aceleração Y (m/s²)": "accel_y",
     "Accel Y (m/s²)": "accel_y",
     "Aceleração Z (m/s²)": "accel_z",
     "Accel Z (m/s²)": "accel_z",
@@ -90,7 +90,13 @@ class ImportadorService:
                 continue
             primeiro = row[0].strip()
             if primeiro.startswith("# StartTime"):
-                start_time = self.__parse_start_time(row[0])
+                try:
+                    start_time = self.__parse_start_time(row[0])
+                except (ValueError, IndexError):
+                    raise ValidationError(
+                        "O cabeçalho '# StartTime' está em formato inválido. "
+                        "Use '# StartTime = MM/DD/AAAA HH:MM:SS.mmm AM' (ou PM)."
+                    )
             elif primeiro.lower().startswith("time"):
                 colunas = [c.strip() for c in row]
                 break

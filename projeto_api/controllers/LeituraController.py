@@ -16,12 +16,23 @@ class LeituraList(MethodResource, Resource):
     @marshal_with(LeituraResponseSchema(many=True))
     def get(self):
         try:
-            rota_id = request.args.get("rota_id", type=int)
+            rota_id = self.__extrair_rota_id()
             if rota_id is not None:
                 return self.__service.get_by_rota(rota_id), 200
             return self.__service.get_all(), 200
         except OperationalError:
             abort(500, message="Erro interno do servidor.")
+
+    @staticmethod
+    def __extrair_rota_id():
+        """Lê o filtro ``rota_id``; valor não numérico responde 400 (não ignora)."""
+        bruto = request.args.get("rota_id")
+        if bruto is None:
+            return None
+        try:
+            return int(bruto)
+        except (TypeError, ValueError):
+            abort(400, message="O parâmetro 'rota_id' deve ser um número inteiro.")
 
     @use_kwargs(LeituraRequestSchema, location="json")
     @marshal_with(LeituraResponseSchema)

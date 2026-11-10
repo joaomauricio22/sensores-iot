@@ -3,6 +3,7 @@ from datetime import datetime
 
 from entities.Base import db
 from entities.EventoRisco import EventoRisco
+from entities.Rota import Rota
 from repositories.EventoRiscoRepository import EventoRiscoRepository
 from repositories.LeituraRepository import LeituraRepository
 from repositories.RotaRepository import RotaRepository
@@ -50,68 +51,96 @@ class AnaliseService:
           **acrescenta** os eventos novos, preservando os já existentes (evita
           apagar eventos cadastrados manualmente via CRUD). Usado por
           ``resumo_rota``/``grafico_rota``.
-        - ``forcar=True``: apaga os eventos existentes e reexecuta a análise do
-          zero (limpa e determinística). Usado pelo endpoint
-          ``POST /rotas/<id>/analisar``, pelo botão "Reanalisar" e pelo
-          ``reanalisar.py``.
+        - ``forcar=True``: apaga os eventos gerados pelos detectores e reexecuta
+          a análise do zero, **preservando os eventos manuais** (método
+          ``MANUAL``). Usado pelo endpoint ``POST /rotas/<id>/analisar``, pelo
+          botão "Reanalisar" e pelo ``reanalisar.py``.
         """
+        # Caminho rápido: rota já analisada e leituras inalteradas não têm
+        # trabalho (evita abrir transação em toda consulta de resumo/gráfico).
         rota = self.__rota_repository.get_by_id(rota_id)
         if not rota:
             return None
-
-        # Rota já analisada e leituras inalteradas: não refaz o trabalho.
         if not forcar and rota.data_analise is not None:
             return []
 
-        # Reanálise explícita (forçar): descarta os eventos anteriores da rota
-        # antes de reexecutar os detectores (análise limpa e determinística).
-        # Na análise automática, os eventos existentes são preservados e apenas
-        # os novos são acrescentados (evita apagar eventos cadastrados via CRUD).
-        if forcar:
-            db.session.query(EventoRisco).filter(EventoRisco.rota_id == rota_id).delete()
+        # Serializa análises concorrentes da MESMA rota: trava a linha da rota
+        # (SELECT ... FOR UPDATE) e relê o estado após adquirir o lock. Sem isso,
+        # requisições simultâneas a /resumo e /grafico tentam inserir os mesmos
+        # eventos ao mesmo tempo, causando erro de chave única (unique constraint).
+        try:
+            rota = (
+                db.session.query(Rota)
+                .filter(Rota.id == rota_id)
+                .with_for_update()
+                .populate_existing()
+                .one_or_none()
+            )
+            if not rota:
+                db.session.rollback()
+                return None
 
-        leituras = self.__leitura_repository.get_by_rota(rota_id)
-        historico = self.__leitura_repository.get_historico(rota_id)
-        limiares = self.__limiares_service.get_limiares()
-        limiares["sensores"] = self.__limiares_service.get_sensores()
+            # Outra requisição pode ter analisado a rota enquanto esta esperava
+            # pelo lock. Nesse caso, apenas libera e retorna sem reprocessar.
+            if not forcar and rota.data_analise is not None:
+                db.session.rollback()
+                return []
 
-        detectados = []
-        for detector in self.__detectores:
-            for evento in detector.detectar(leituras, rota, limiares, historico=historico):
-                detectados.append((detector.get_metodo(), evento))
+            # Reanálise forçada: remove apenas os eventos dos detectores,
+            # preservando os cadastrados manualmente (método MANUAL). Na análise
+            # automática (forcar=False) nada é apagado: apenas acrescenta.
+            if forcar:
+                db.session.query(EventoRisco).filter(
+                    EventoRisco.rota_id == rota_id,
+                    EventoRisco.metodo != "MANUAL",
+                ).delete(synchronize_session=False)
 
-        # Eventos já persistidos (para não duplicar na análise automática).
-        existentes = {
-            (e.leitura_id, e.metodo, e.classificacao, e.canal)
-            for e in self.__evento_repository.get_by_rota(rota_id)
-        }
-        vistos = set()
-        novos = []
-        for metodo, evento in detectados:
-            leitura = evento["leitura"]
-            classificacao = evento.get("classificacao") or "Comportamento atípico"
-            canal = evento.get("canal") or "geral"
-            chave = (leitura.id, metodo, classificacao, canal)
-            if chave in existentes or chave in vistos:
-                continue
-            vistos.add(chave)
-            novos.append(EventoRisco(
-                leitura_id=leitura.id,
-                rota_id=rota_id,
-                data_hora=leitura.data_hora,
-                metodo=metodo,
-                canal=canal,
-                valor=evento.get("valor"),
-                forca_g=evento.get("forca_g"),
-                instabilidade=evento.get("instabilidade"),
-                classificacao=classificacao,
-                descricao=evento.get("descricao"),
-            ))
+            leituras = self.__leitura_repository.get_by_rota(rota_id)
+            historico = self.__leitura_repository.get_historico(rota_id)
+            limiares = self.__limiares_service.get_limiares()
+            limiares["sensores"] = self.__limiares_service.get_sensores()
 
-        db.session.add_all(novos)
-        rota.data_analise = datetime.now()
-        db.session.commit()
-        return novos
+            detectados = []
+            for detector in self.__detectores:
+                for evento in detector.detectar(leituras, rota, limiares, historico=historico):
+                    detectados.append((detector.get_metodo(), evento))
+
+            # Eventos já persistidos (para não duplicar na análise automática).
+            existentes = {
+                (e.leitura_id, e.metodo, e.classificacao, e.canal)
+                for e in self.__evento_repository.get_by_rota(rota_id)
+            }
+            vistos = set()
+            novos = []
+            for metodo, evento in detectados:
+                leitura = evento["leitura"]
+                classificacao = evento.get("classificacao") or "Comportamento atípico"
+                canal = evento.get("canal") or "geral"
+                chave = (leitura.id, metodo, classificacao, canal)
+                if chave in existentes or chave in vistos:
+                    continue
+                vistos.add(chave)
+                novos.append(EventoRisco(
+                    leitura_id=leitura.id,
+                    rota_id=rota_id,
+                    data_hora=leitura.data_hora,
+                    metodo=metodo,
+                    canal=canal,
+                    valor=evento.get("valor"),
+                    forca_g=evento.get("forca_g"),
+                    instabilidade=evento.get("instabilidade"),
+                    classificacao=classificacao,
+                    descricao=evento.get("descricao"),
+                ))
+
+            db.session.add_all(novos)
+            rota.data_analise = datetime.now()
+            db.session.commit()
+            return novos
+        except Exception:
+            # Nunca deixa a sessão "suja" após um erro no meio da análise.
+            db.session.rollback()
+            raise
 
     def grafico_rota(self, rota_id: int):
         """Retorna os dados do gráfico (velocidade, Força G, RPM) e de GPS."""
