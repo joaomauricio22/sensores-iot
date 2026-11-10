@@ -1,5 +1,6 @@
 import csv
 import io
+import unicodedata
 from datetime import datetime, timedelta
 
 from marshmallow import ValidationError
@@ -22,12 +23,34 @@ MAPEAMENTO_PADRAO = {
     "Accel X (m/s²)": "accel_x",
     "Aceleração Y (m/s²)": "accel_y",
     "Accel Y (m/s²)": "accel_y",
+    # Algumas versões do software OBD (localização pt-BR) gravam a coluna do
+    # eixo Y com erro de tradução: "Acelere Y" em vez de "Aceleração Y".
+    "Acelere Y (m/s²)": "accel_y",
     "Aceleração Z (m/s²)": "accel_z",
     "Accel Z (m/s²)": "accel_z",
     "Posição absoluta do acelerador (%)": "posicao_acelerador",
     "Absolute throttle position (%)": "posicao_acelerador",
     "Latitude (deg)": "latitude",
     "Longitude (deg)": "longitude",
+}
+
+
+def _normalizar_nome(nome: str) -> str:
+    """Normaliza o nome de uma coluna para comparação resiliente.
+
+    Remove acentos (NFKD), converte para minúsculas e colapsa espaços, para
+    tolerar variações de acentuação/codificação do software OBD (ex.: "m/s²"
+    vira "m/s2", "Aceleração" vira "aceleracao").
+    """
+    s = unicodedata.normalize("NFKD", str(nome))
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return " ".join(s.lower().split())
+
+
+# Versão normalizada do mapeamento, usada na leitura do CSV. O alias acima
+# ("Acelere Y") continua necessário porque o erro é ortográfico, não de acento.
+MAPEAMENTO_NORMALIZADO = {
+    _normalizar_nome(nome): atributo for nome, atributo in MAPEAMENTO_PADRAO.items()
 }
 
 
@@ -112,8 +135,9 @@ class ImportadorService:
 
         indice_atributo = {}
         for i, nome in enumerate(colunas):
-            if nome in MAPEAMENTO_PADRAO:
-                indice_atributo[i] = MAPEAMENTO_PADRAO[nome]
+            atributo = MAPEAMENTO_NORMALIZADO.get(_normalizar_nome(nome))
+            if atributo is not None:
+                indice_atributo[i] = atributo
 
         if not indice_atributo:
             raise ValidationError(

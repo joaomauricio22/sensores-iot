@@ -290,6 +290,25 @@ def main():
                  bool(leituras_pt) and leituras_pt[0].get("accel_y") is not None,
                  str(leituras_pt[0].get("accel_y") if leituras_pt else None))
 
+        # R5b: alias do typo "Acelere Y" (localização pt-BR do software OBD).
+        csv_typo = (
+            "# StartTime = 01/21/2026 08:00:00.0000 AM\n"
+            "Time (sec), Velocidade do veículo (km/h), Aceleração X (m/s²), Acelere Y (m/s²)\n"
+            "0, 50, 1.0, 2.0\n"
+            "1, 60, 1.5, 2.5\n"
+        )
+        r = requests.post(f"{BASE}/rotas/importar", json={
+            "nome": f"Rota typo {SUFIXO}", "arquivo_origem": "typo.csv", "conteudo_csv": csv_typo,
+        })
+        show("POST importar CSV 'Acelere Y' (201)", r.status_code == 201, f"{r.status_code}")
+        rota_typo = r.json().get("rota_id") if r.status_code == 201 else None
+        if rota_typo:
+            rotas_criadas.append(rota_typo)
+            leituras_typo = requests.get(f"{BASE}/leituras", params={"rota_id": rota_typo}).json()
+            show("Acelere Y mapeada (accel_y não nulo)",
+                 bool(leituras_typo) and leituras_typo[0].get("accel_y") is not None,
+                 str(leituras_typo[0].get("accel_y") if leituras_typo else None))
+
         # R6: editar leitura remove o evento obsoleto.
         r = requests.post(f"{BASE}/rotas", json={"nome": f"Rota editar {SUFIXO}"})
         rota_ed = r.json().get("id") if r.status_code == 201 else None
