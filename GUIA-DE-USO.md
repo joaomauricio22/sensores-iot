@@ -32,14 +32,18 @@ cd projeto_interface
 python main.py
 ```
 
+> Se a interface abrir com **"API offline"**, abra o Docker Desktop e suba os
+> containers (`docker compose up -d` na pasta `projeto_api`), depois clique em
+> **"Tentar novamente"**. A interface também tenta reconectar sozinha.
+
 ---
 
 ## 2. Cadastrar uma rota (o "cadastro" em lote)
 
 Na seção **Dados → Rotas**:
 
-1. Clique em **Nova Rota** e selecione o arquivo `.csv` de telemetria.
-2. Dê um nome para a rota (ex.: "Rota 1").
+1. Clique em **Nova Rota** e selecione **um ou mais** arquivos `.csv` de telemetria.
+2. Cada arquivo vira uma **rota**, com o nome igual ao do arquivo.
 3. O sistema importa as leituras, **padroniza os nomes das colunas** e **limpa** os dados
    (spikes de acelerômetro, velocidades implausíveis e excesso de leituras paradas).
 
@@ -65,13 +69,16 @@ Na seção **Dados**, as três tabelas do sistema têm operações de **criar, l
 
 ## 4. Explorar os resultados
 
-Ao selecionar uma rota na barra superior, cada seção se atualiza:
+Use a barra superior (**"Rota em análise"**) nas seções **Visão Geral**, **Gráfico** e
+**Sensores** para escolher a rota; essas seções se atualizam automaticamente ao trocar a
+rota. Nas tabelas de **Dados**, cada aba carrega na primeira visita e é atualizada
+**manualmente** pelo botão **Atualizar**.
 
 | Seção | O que mostra |
 |---|---|
 | **Dados** | CRUD das tabelas rota, leitura e evento_risco |
 | **Visão Geral** | score de segurança (0–100), duração, distância, velocidades, RPM, eventos por tipo e **exportação CSV** |
-| **Gráfico** | painel com velocidade, Força G e RPM; linhas tracejadas = limiares do JSON; passe o mouse para ver os valores |
+| **Gráfico** | painel com velocidade, Força G e RPM; linhas tracejadas = limiares do JSON; passe o mouse para ver os valores; use a barra inferior para **zoom/pan** |
 | **Sensores** | estatísticas (mín/máx/média) e % de leituras fora do limiar por sensor |
 | **Comparar** | compara o resumo (score e estatísticas) de duas rotas |
 

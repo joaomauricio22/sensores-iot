@@ -1,6 +1,6 @@
 # Sentinela — Telemetria Veicular (OBD-II) e Detecção de Eventos de Risco
 
-> **Trabalho PAV — Parte 6** · Programação de Aplicações
+> **Trabalho PAV**
 
 Sistema para **receber, padronizar, armazenar e analisar dados de telemetria veicular**
 coletados via interface **OBD-II**, identificando e **classificando** eventos de condução
@@ -201,10 +201,22 @@ pip install requests matplotlib pillow
 python main.py
 ```
 
-Na interface: **Dados → Rotas → Nova Rota** (importa o CSV) → o sistema
+Na interface: **Dados → Rotas → Nova Rota** (importa um ou mais CSVs) → o sistema
 **analisa automaticamente** e exibe **Visão Geral (score)**, **Gráfico**,
 **Análise por Sensor**, permite **comparar rotas** e fazer o **CRUD completo**
 de rotas, leituras e eventos.
+
+Comportamentos da interface:
+
+- **Nova Rota** aceita **vários CSVs de uma vez**; cada arquivo vira uma rota
+  com o nome do próprio arquivo.
+- As tabelas de **Dados** carregam na primeira visita a cada aba e, depois disso,
+  são atualizadas **manualmente** pelo botão **Atualizar** (ou após criar/editar/excluir).
+- O seletor **"Rota em análise"** (barra superior) aparece apenas em
+  **Visão Geral**, **Gráfico** e **Sensores**.
+- **Gráfico** e **Sensores** têm barra de **zoom/pan** (matplotlib).
+- Se a API estiver fora do ar, a interface mostra **"API offline"** com o botão
+  **"Tentar novamente"** e tenta reconectar sozinha.
 
 ### Comandos auxiliares
 
