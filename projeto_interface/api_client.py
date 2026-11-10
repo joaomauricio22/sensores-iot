@@ -33,6 +33,24 @@ def _format_errors(errors) -> str:
     return str(errors)
 
 
+def mensagem_conexao(erro) -> str:
+    """Traduz um erro de rede em uma instrução clara para o usuário.
+
+    Evita exibir o texto técnico do `requests` (ex.: ``HTTPConnectionPool``
+    e ``WinError 10061``) na interface.
+    """
+    if isinstance(erro, requests.exceptions.ConnectionError):
+        return (
+            "Não foi possível conectar à API do Sentinela.\n\n"
+            "Abra o Docker Desktop e execute, na pasta projeto_api:\n"
+            "    docker compose up -d\n\n"
+            "Depois clique em \"Tentar novamente\"."
+        )
+    if isinstance(erro, requests.exceptions.Timeout):
+        return "A API demorou para responder. Tente novamente em instantes."
+    return "Falha de comunicação com a API. Tente novamente."
+
+
 class ApiClient:
     """Métodos HTTP de cada recurso exposto pela API."""
 
@@ -48,6 +66,13 @@ class ApiClient:
         if extra:
             url += f"/{extra}"
         return url
+
+    def disponivel(self, timeout=2) -> bool:
+        """Verifica rapidamente se a API está no ar (conexão e resposta 200)."""
+        try:
+            return requests.get(self._url("rotas"), timeout=timeout).status_code == 200
+        except requests.exceptions.RequestException:
+            return False
 
     # ---- Rotas --------------------------------------------------------- #
     def list_rotas(self):

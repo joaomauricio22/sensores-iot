@@ -2,6 +2,7 @@ services:
   # Container do banco de dados (PostgreSQL)
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: admin
@@ -21,6 +22,7 @@ services:
   # Container da API REST
   api:
     build: .
+    restart: unless-stopped
     environment:
       # Dentro da rede do compose, o banco é acessado pelo nome "db"
       DATABASE_URI: postgresql://postgres:admin@db:5432/telemetria

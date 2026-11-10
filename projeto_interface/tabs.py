@@ -17,7 +17,7 @@ import requests
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 
-from api_client import extract_error
+from api_client import extract_error, mensagem_conexao
 
 BG = "#f5f6fa"
 CARD = "white"
@@ -134,7 +134,7 @@ def _erro_api(resp):
 
 
 def _erro_conexao(erro):
-    messagebox.showerror("Erro", f"Erro de comunicação com a API:\n{erro}")
+    messagebox.showerror("Sem conexão com a API", mensagem_conexao(erro))
 
 
 # =========================================================================
@@ -358,6 +358,16 @@ class RotaTab(tk.Frame):
             return
 
         caminhos = list(caminhos)
+
+        # Verifica a API antes de tentar importar, para dar uma instrução clara
+        # (em vez de repetir o mesmo erro técnico para cada arquivo).
+        if not self.app.api.disponivel():
+            messagebox.showwarning(
+                "API indisponível",
+                mensagem_conexao(requests.exceptions.ConnectionError()),
+            )
+            return
+
         self.lbl_status.configure(text=f"Importando 0/{len(caminhos)}…")
 
         def importar_todos():
@@ -375,7 +385,7 @@ class RotaTab(tk.Frame):
                         nome, os.path.basename(caminho), conteudo
                     )
                 except requests.exceptions.RequestException as erro:
-                    resultados.append((nome, False, f"Erro de comunicação: {erro}"))
+                    resultados.append((nome, False, mensagem_conexao(erro)))
                     continue
                 if resp.status_code in (200, 201):
                     dados = resp.json()
@@ -394,18 +404,25 @@ class RotaTab(tk.Frame):
     def _render_importacao(self, resultados):
         if isinstance(resultados, dict) and "__erro__" in resultados:
             self.lbl_status.configure(text="Erro ao importar.")
+            messagebox.showwarning("Sem conexão com a API", resultados["__erro__"])
             return
         criadas = [r for r in resultados if r[1]]
         falhas = [r for r in resultados if not r[1]]
         self.lbl_status.configure(text=f"{len(criadas)} rota(s) criada(s)")
 
-        linhas = [f"{len(criadas)} rota(s) criada(s) com sucesso:"]
-        linhas += [f"  • {nome} — {detalhe}" for nome, _ok, detalhe in criadas]
+        if criadas:
+            linhas = [f"{len(criadas)} rota(s) criada(s) com sucesso:"]
+            linhas += [f"  • {nome} — {detalhe}" for nome, _ok, detalhe in criadas]
+        else:
+            linhas = ["Nenhuma rota foi importada."]
         if falhas:
             linhas.append("")
             linhas.append(f"{len(falhas)} falha(s):")
             linhas += [f"  • {nome} — {detalhe}" for nome, _ok, detalhe in falhas]
-        messagebox.showinfo("Importação concluída", "\n".join(linhas))
+        if falhas and not criadas:
+            messagebox.showwarning("Importação", "\n".join(linhas))
+        else:
+            messagebox.showinfo("Importação concluída", "\n".join(linhas))
 
         self.app.recarregar_rotas()
 

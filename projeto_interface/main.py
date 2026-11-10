@@ -14,7 +14,7 @@ from tkinter import messagebox, ttk
 
 import requests
 
-from api_client import ApiClient
+from api_client import ApiClient, mensagem_conexao
 from tabs import (
     BG,
     BORDA,
@@ -104,6 +104,7 @@ class App:
         # Fila usada para entregar, na thread principal, os resultados das
         # tarefas executadas em segundo plano (análise/consultas).
         self._fila = queue.Queue()
+        self._retry_job = None
         self._agendar_consumidor()
 
         self._construir()
@@ -177,7 +178,15 @@ class App:
         self.combo_rota.bind("<<ComboboxSelected>>", self._trocar_rota)
         self.lbl_status = tk.Label(topo, text="", font=("Segoe UI", 9),
                                    bg=BG, fg=CINZA)
-        self.lbl_status.pack(side="right", padx=15)
+        self.lbl_status.pack(side="right", padx=(0, 15))
+        self.btn_reconectar = tk.Button(
+            topo, text="Tentar novamente", font=("Segoe UI", 9, "bold"),
+            bg=COR_ATIVO, fg="white", relief="flat", bd=0, cursor="hand2",
+            activebackground="#0a6bb5", activeforeground="white",
+            command=self.recarregar_rotas,
+        )
+        self.btn_reconectar.pack(side="right", padx=(0, 6))
+        self.btn_reconectar.pack_forget()
 
         self.conteudo = tk.Frame(self.area, bg=BG)
         self.conteudo.pack(fill="both", expand=True)
@@ -233,14 +242,14 @@ class App:
         try:
             resp = self.api.list_rotas()
         except requests.exceptions.RequestException:
-            self.lbl_status.configure(text="API indisponível")
+            self._marcar_offline()
             return
         if resp.status_code != 200:
-            self.lbl_status.configure(text="Erro ao carregar rotas")
+            self._marcar_offline()
             return
 
         self.rotas = resp.json()
-        self.lbl_status.configure(text=f"{len(self.rotas)} rota(s) cadastrada(s)")
+        self._marcar_online(len(self.rotas))
         nomes = ["Todas"] + [_rotulo_rota(r) for r in self.rotas]
         self.combo_rota["values"] = nomes
 
@@ -261,6 +270,43 @@ class App:
         self.secoes["comparar"].atualizar()
         if self.secao_atual in ("visao", "grafico", "sensores"):
             self.secoes[self.secao_atual].atualizar()
+
+    # ------------------------------------------------------------------ #
+    # Estado da conexão com a API (status do topo + reconexão automática)
+    # ------------------------------------------------------------------ #
+    def _marcar_offline(self):
+        self.lbl_status.configure(
+            text="API offline — inicie o Docker (docker compose up -d)",
+            fg="#d63031",
+        )
+        self.btn_reconectar.pack(side="right", padx=(0, 6))
+        self._agendar_reconexao()
+
+    def _marcar_online(self, quantidade):
+        self.lbl_status.configure(
+            text=f"{quantidade} rota(s) cadastrada(s)", fg=CINZA,
+        )
+        self.btn_reconectar.pack_forget()
+        self._cancelar_reconexao()
+
+    def _agendar_reconexao(self):
+        self._cancelar_reconexao()
+        self._retry_job = self.root.after(5000, self._tentar_reconexao)
+
+    def _cancelar_reconexao(self):
+        if getattr(self, "_retry_job", None) is not None:
+            try:
+                self.root.after_cancel(self._retry_job)
+            except Exception:  # noqa: BLE001 — o timer já pode ter disparado
+                pass
+            self._retry_job = None
+
+    def _tentar_reconexao(self):
+        self._retry_job = None
+        if self.api.disponivel():
+            self.recarregar_rotas()
+        else:
+            self._agendar_reconexao()
 
     def definir_rota(self, rota_id):
         self.rota_atual_id = rota_id
@@ -300,7 +346,7 @@ class App:
             try:
                 resultado = funcao()
             except requests.exceptions.RequestException as erro:
-                resultado = {"__erro__": str(erro)}
+                resultado = {"__erro__": mensagem_conexao(erro)}
             self._fila.put((ao_concluir, resultado))
 
         threading.Thread(target=trabalho, daemon=True).start()
