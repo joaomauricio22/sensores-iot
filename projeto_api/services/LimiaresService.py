@@ -59,12 +59,6 @@ class LimiaresService:
     def get_sensores(self) -> dict:
         return copy.deepcopy(self.__carregar()["sensores"])
 
-    def get_sensor(self, canal: str):
-        return copy.deepcopy(self.__carregar()["sensores"].get(canal))
-
-    def get_caminho(self) -> str:
-        return self.__caminho
-
     # ------------------------------------------------------------------ #
     # Carregamento e validação
     # ------------------------------------------------------------------ #

@@ -171,10 +171,13 @@ class App:
 
         topo = tk.Frame(self.area, bg=BG, highlightbackground=BORDA, highlightthickness=1)
         topo.pack(fill="x")
-        tk.Label(topo, text="Rota em análise:", font=("Segoe UI", 10, "bold"),
-                 bg=BG, fg=TEXTO).pack(side="left", padx=(15, 6), pady=8)
-        self.combo_rota = ttk.Combobox(topo, state="readonly", width=42)
-        self.combo_rota.pack(side="left", pady=8)
+        self.filtro_rota = tk.Frame(topo, bg=BG)
+        self.filtro_rota.pack(side="left", pady=8)
+        tk.Label(self.filtro_rota, text="Rota em análise:",
+                 font=("Segoe UI", 10, "bold"), bg=BG, fg=TEXTO
+                 ).pack(side="left", padx=(15, 6))
+        self.combo_rota = ttk.Combobox(self.filtro_rota, state="readonly", width=42)
+        self.combo_rota.pack(side="left")
         self.combo_rota.bind("<<ComboboxSelected>>", self._trocar_rota)
         self.lbl_status = tk.Label(topo, text="", font=("Segoe UI", 9),
                                    bg=BG, fg=CINZA)
@@ -230,9 +233,17 @@ class App:
 
         self.secao_atual = chave
         secao = self.secoes[chave]
+
+        # O seletor "Rota em análise" só faz sentido nas seções de análise;
+        # Dados e Comparar têm seus próprios seletores/filtros.
+        if chave in ("dados", "comparar"):
+            self.filtro_rota.pack_forget()
+        else:
+            self.filtro_rota.pack(side="left", pady=8)
+
         if chave == "grafico":
             secao.plotar()
-        elif hasattr(secao, "atualizar"):
+        elif chave != "dados" and hasattr(secao, "atualizar"):
             secao.atualizar()
 
     # ------------------------------------------------------------------ #
@@ -250,7 +261,7 @@ class App:
 
         self.rotas = resp.json()
         self._marcar_online(len(self.rotas))
-        nomes = ["Todas"] + [_rotulo_rota(r) for r in self.rotas]
+        nomes = [_rotulo_rota(r) for r in self.rotas]
         self.combo_rota["values"] = nomes
 
         if selecionar is not None and any(r["id"] == selecionar for r in self.rotas):
@@ -263,13 +274,11 @@ class App:
             self.definir_rota(self.rotas[0]["id"])
         else:
             self.rota_atual_id = None
-            self.combo_rota.set("Todas")
+            self.combo_rota.set("")
 
         # Atualiza as listas que dependem do cadastro de rotas.
         self.secoes["dados"].atualizar()
         self.secoes["comparar"].atualizar()
-        if self.secao_atual in ("visao", "grafico", "sensores"):
-            self.secoes[self.secao_atual].atualizar()
 
     # ------------------------------------------------------------------ #
     # Estado da conexão com a API (status do topo + reconexão automática)
@@ -312,22 +321,20 @@ class App:
         self.rota_atual_id = rota_id
         for indice, rota in enumerate(self.rotas):
             if rota["id"] == rota_id:
-                self.combo_rota.current(indice + 1)
+                self.combo_rota.current(indice)
                 break
         else:
-            self.combo_rota.set("Todas")
+            self.combo_rota.set("")
             self.rota_atual_id = None
         self.refresh_detalhes()
 
     def _trocar_rota(self, _event):
         indice = self.combo_rota.current()
-        if indice <= 0:
+        if indice < 0 or indice >= len(self.rotas):
             self.rota_atual_id = None
         else:
-            self.rota_atual_id = self.rotas[indice - 1]["id"]
+            self.rota_atual_id = self.rotas[indice]["id"]
         self.refresh_detalhes()
-        if self.secao_atual in ("visao", "grafico", "sensores"):
-            self.secoes[self.secao_atual].atualizar()
 
     def refresh_detalhes(self):
         """Atualiza as seções que dependem da rota selecionada."""

@@ -78,15 +78,6 @@ class ApiClient:
     def list_rotas(self):
         return requests.get(self._url("rotas"))
 
-    def get_rota(self, rota_id):
-        return requests.get(self._url("rotas", rota_id))
-
-    def criar_rota(self, nome, arquivo_origem=None):
-        return requests.post(
-            self._url("rotas"),
-            json={"nome": nome, "arquivo_origem": arquivo_origem},
-        )
-
     def atualizar_rota(self, rota_id, nome, arquivo_origem=None):
         return requests.put(
             self._url("rotas", rota_id),

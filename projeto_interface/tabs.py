@@ -123,6 +123,17 @@ def _rotulo_rota(rota):
     return f"#{rota['id']} — {rota['nome']}"
 
 
+def _rota_do_combo(app, combo):
+    """Retorna o id da rota selecionada num combo que começa com \"Todas\".
+
+    Usado pelos filtros das abas Leituras e Eventos (índice 0 = \"Todas\").
+    """
+    indice = combo.current()
+    if indice <= 0:
+        return None
+    return app.rotas[indice - 1]["id"]
+
+
 def _fmt_num(valor, casas=1):
     if valor is None:
         return ""
@@ -213,6 +224,11 @@ class FormDialog(tk.Toplevel):
             (container or widget).grid(row=linha, column=1, sticky="ew", pady=5)
             self.widgets[chave] = widget
 
+        botoes = tk.Frame(self, bg=BG)
+        botoes.pack(pady=14)
+        _botao(botoes, "Salvar", "#00b894", self._salvar, width=12).pack(side="left", padx=5)
+        _botao(botoes, "Cancelar", CINZA, self.destroy, width=12).pack(side="left", padx=5)
+
     def _escolher_arquivo(self, entrada):
         """Abre o seletor e preenche a entrada com o nome do arquivo escolhido."""
         caminho = filedialog.askopenfilename(
@@ -222,11 +238,6 @@ class FormDialog(tk.Toplevel):
         if caminho:
             entrada.delete(0, "end")
             entrada.insert(0, os.path.basename(caminho))
-
-        botoes = tk.Frame(self, bg=BG)
-        botoes.pack(pady=14)
-        _botao(botoes, "Salvar", "#00b894", self._salvar, width=12).pack(side="left", padx=5)
-        _botao(botoes, "Cancelar", CINZA, self.destroy, width=12).pack(side="left", padx=5)
 
     def _salvar(self):
         dados = {}
@@ -372,7 +383,7 @@ class RotaTab(tk.Frame):
 
         def importar_todos():
             resultados = []
-            for indice, caminho in enumerate(caminhos, start=1):
+            for caminho in caminhos:
                 nome = os.path.splitext(os.path.basename(caminho))[0]
                 try:
                     with open(caminho, encoding="utf-8-sig", errors="replace") as arquivo:
@@ -530,12 +541,6 @@ class LeituraTab(tk.Frame):
         self.tree.pack(side="left", fill="both", expand=True)
         vsb.pack(side="right", fill="y")
 
-    def _rota_filtro(self):
-        indice = self.combo_rota.current()
-        if indice <= 0:
-            return None
-        return self.app.rotas[indice - 1]["id"]
-
     def atualizar(self):
         nomes = ["Todas"] + [_rotulo_rota(r) for r in self.app.rotas]
         self.combo_rota["values"] = nomes
@@ -543,7 +548,7 @@ class LeituraTab(tk.Frame):
             self.combo_rota.current(0)
         self.lbl_status.configure(text="Carregando…")
 
-        filtro = self._rota_filtro()
+        filtro = _rota_do_combo(self.app, self.combo_rota)
 
         def carregar():
             return self.app.api.list_leituras(filtro)
@@ -711,12 +716,6 @@ class EventoRiscoTab(tk.Frame):
         self.tree.pack(side="left", fill="both", expand=True)
         vsb.pack(side="right", fill="y")
 
-    def _rota_filtro(self):
-        indice = self.combo_rota.current()
-        if indice <= 0:
-            return None
-        return self.app.rotas[indice - 1]["id"]
-
     def atualizar(self):
         nomes = ["Todas"] + [_rotulo_rota(r) for r in self.app.rotas]
         self.combo_rota["values"] = nomes
@@ -726,7 +725,7 @@ class EventoRiscoTab(tk.Frame):
         tipo = self.combo_tipo.get()
         if tipo == "Todos":
             tipo = None
-        filtro = self._rota_filtro()
+        filtro = _rota_do_combo(self.app, self.combo_rota)
         self.lbl_status.configure(text="Carregando…")
 
         def carregar():
@@ -882,13 +881,25 @@ class DadosTab(tk.Frame):
         self.notebook.add(self.evento_tab, text="Eventos")
         self.notebook.bind("<<NotebookTabChanged>>", self._trocar)
 
-    def _trocar(self, _event):
+        self._abas = [self.rota_tab, self.leitura_tab, self.evento_tab]
+        self._carregadas = set()
+
+    def _aba_atual(self):
         indice = self.notebook.index(self.notebook.select())
-        [self.rota_tab, self.leitura_tab, self.evento_tab][indice].atualizar()
+        return self._abas[indice]
+
+    def _trocar(self, _event):
+        # Carrega apenas na primeira visita à aba; depois disso, a atualização
+        # é feita manualmente pelo botão "Atualizar".
+        aba = self._aba_atual()
+        if aba not in self._carregadas:
+            aba.atualizar()
+            self._carregadas.add(aba)
 
     def atualizar(self):
-        indice = self.notebook.index(self.notebook.select())
-        [self.rota_tab, self.leitura_tab, self.evento_tab][indice].atualizar()
+        aba = self._aba_atual()
+        aba.atualizar()
+        self._carregadas.add(aba)
 
 
 # =========================================================================
@@ -953,7 +964,10 @@ class DashboardTab(tk.Frame):
         self.resumo = None
         self.eventos = []
         if not rota_id:
-            self._mostrar_vazio("Selecione uma rota na barra superior.")
+            self._mostrar_vazio(
+                "Nenhuma rota cadastrada. Importe um CSV em Dados → Rotas."
+                if not self.app.rotas else "Selecione uma rota na barra superior."
+            )
             return
 
         self.var_score.set("…")
@@ -1125,7 +1139,11 @@ class GraficoTab(tk.Frame):
         self._tooltip = None
 
         if not rota_id:
-            self._mostrar_mensagem("Selecione uma rota para visualizar o gráfico.", CINZA)
+            self._mostrar_mensagem(
+                "Nenhuma rota cadastrada. Importe um CSV em Dados → Rotas."
+                if not self.app.rotas else "Selecione uma rota para visualizar o gráfico.",
+                CINZA,
+            )
             return
 
         self._mostrar_mensagem("Analisando a rota…", CINZA)
@@ -1297,7 +1315,12 @@ class SensorTab(tk.Frame):
     def atualizar(self):
         rota_id = self.app.rota_atual_id
         if not rota_id:
-            self.lbl_status.configure(text="Selecione uma rota para ver a análise por sensor.")
+            self.lbl_status.configure(
+                text=(
+                    "Nenhuma rota cadastrada. Importe um CSV em Dados → Rotas."
+                    if not self.app.rotas else "Selecione uma rota para ver a análise por sensor."
+                )
+            )
             self._limpar()
             return
         self.lbl_status.configure(text="Carregando…")
@@ -1443,7 +1466,6 @@ class CompararTab(tk.Frame):
     def __init__(self, master, app):
         super().__init__(master, bg=BG)
         self.app = app
-        self.rotas = []
         self.tree = None
         self._build()
 
@@ -1476,8 +1498,7 @@ class CompararTab(tk.Frame):
         self.tree.pack(side="left", fill="both", expand=True)
 
     def atualizar(self):
-        self.rotas = self.app.rotas
-        nomes = [_rotulo_rota(r) for r in self.rotas]
+        nomes = [_rotulo_rota(r) for r in self.app.rotas]
         self.combo_a["values"] = nomes
         self.combo_b["values"] = nomes
         if nomes:
@@ -1486,9 +1507,9 @@ class CompararTab(tk.Frame):
 
     def _rota_id(self, combo):
         indice = combo.current()
-        if indice < 0 or indice >= len(self.rotas):
+        if indice < 0 or indice >= len(self.app.rotas):
             return None
-        return self.rotas[indice]["id"]
+        return self.app.rotas[indice]["id"]
 
     def comparar(self):
         ida = self._rota_id(self.combo_a)
