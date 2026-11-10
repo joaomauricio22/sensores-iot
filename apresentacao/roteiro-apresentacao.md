@@ -1,4 +1,4 @@
-# Roteiro da Apresentação — Telemetria Veicular (Parte 6)
+# Roteiro da Apresentação — Sentinela (Telemetria Veicular)
 
 Mapeamento dos 10 itens exigidos ao que foi implementado.
 

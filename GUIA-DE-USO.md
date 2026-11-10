@@ -1,4 +1,4 @@
-# Guia de Uso — Telemetria Veicular (OBD-II)
+# Guia de Uso — Sentinela (Telemetria Veicular OBD-II)
 
 Este guia explica como usar o sistema como um produto real: cadastrar rotas de
 telemetria, gerenciar leituras e eventos, e explorar o dashboard, o gráfico, a

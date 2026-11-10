@@ -1,4 +1,6 @@
-# Trabalho PAV — Telemetria Veicular (OBD-II) e Detecção de Eventos de Risco
+# Sentinela — Telemetria Veicular (OBD-II) e Detecção de Eventos de Risco
+
+> **Trabalho PAV — Parte 6** · Programação de Aplicações
 
 Sistema para **receber, padronizar, armazenar e analisar dados de telemetria veicular**
 coletados via interface **OBD-II**, identificando e **classificando** eventos de condução
@@ -44,6 +46,7 @@ Trabalho_PAV/
 │   ├── main.py             # Janela principal com navegação lateral
 │   ├── tabs.py             # Seções: Dados (Rotas/Leituras/Eventos), Visão Geral, Gráfico, Sensores, Comparar
 │   ├── api_client.py       # Cliente HTTP
+│   ├── assets/             # Logo e ícone do Sentinela (PNG/ICO)
 │   └── capturar_telas.py   # Captura as telas (exige API no ar) → apresentacao/imgs/
 │
 └── apresentacao/           # Apresentação (slides)

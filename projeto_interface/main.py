@@ -6,6 +6,7 @@ Navegação lateral:
 
 Executar: python main.py
 """
+import os
 import queue
 import threading
 import tkinter as tk
@@ -31,6 +32,57 @@ COR_SIDEBAR = "#2d3436"
 COR_ATIVO = "#0984e3"
 COR_HOVER = "#3d4446"
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ASSETS = os.path.join(BASE_DIR, "assets")
+
+
+def aplicar_icone(root):
+    """Define o ícone da janela (PNG para o Tk e ICO para o Windows)."""
+    try:
+        root.iconbitmap(default=os.path.join(ASSETS, "sentinela_icon.ico"))
+    except tk.TclError:
+        pass
+    try:
+        icone = tk.PhotoImage(file=os.path.join(ASSETS, "sentinela_icon.png"))
+        root.iconphoto(True, icone)
+        root._icone = icone  # mantém a referência viva
+    except tk.TclError:
+        pass
+
+
+class Splash(tk.Toplevel):
+    """Tela de carregamento exibida enquanto a interface inicia."""
+
+    def __init__(self, master, logo_path, largura=560, altura=310):
+        super().__init__(master)
+        self.overrideredirect(True)
+        self.configure(bg="#0d1b2a")
+        self.attributes("-topmost", True)
+
+        try:
+            logo = tk.PhotoImage(file=logo_path).subsample(2)
+            lbl = tk.Label(self, image=logo, bg="#0d1b2a", bd=0)
+            lbl.image = logo
+            lbl.pack(pady=(42, 6))
+        except tk.TclError:
+            tk.Label(self, text="SENTINELA", font=("Segoe UI", 24, "bold"),
+                     bg="#0d1b2a", fg="white").pack(pady=(60, 6))
+
+        tk.Label(self, text="Telemetria e Segurança Veicular",
+                 font=("Segoe UI", 10), bg="#0d1b2a", fg="#b2bec3").pack()
+        tk.Label(self, text="Carregando…", font=("Segoe UI", 9),
+                 bg="#0d1b2a", fg="#636e72").pack(pady=(18, 6))
+        barra = ttk.Progressbar(self, mode="indeterminate", length=260)
+        barra.pack()
+        barra.start(12)
+        self._barra = barra
+
+        self.update_idletasks()
+        x = (self.winfo_screenwidth() - largura) // 2
+        y = (self.winfo_screenheight() - altura) // 2
+        self.geometry(f"{largura}x{altura}+{x}+{y}")
+        self.update()
+
 
 class App:
     """Janela principal com barra lateral e área de conteúdo."""
@@ -44,7 +96,7 @@ class App:
         self.botoes = {}
         self.secao_atual = None
 
-        self.root.title("Telemetria Veicular — Detecção de Eventos de Risco")
+        self.root.title("Sentinela — Telemetria e Segurança Veicular")
         self.root.minsize(1080, 680)
         self.root.configure(bg=BG)
         self.__centralizar(1280, 800)
@@ -78,10 +130,19 @@ class App:
         self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
 
-        tk.Label(self.sidebar, text="Telemetria", font=("Segoe UI", 16, "bold"),
-                 bg=COR_SIDEBAR, fg="white").pack(pady=(22, 0))
-        tk.Label(self.sidebar, text="Veicular", font=("Segoe UI", 11),
-                 bg=COR_SIDEBAR, fg="#b2bec3").pack(pady=(0, 18))
+        try:
+            logo = tk.PhotoImage(
+                file=os.path.join(ASSETS, "sentinela_logo.png")
+            ).subsample(5)
+            lbl_logo = tk.Label(self.sidebar, image=logo, bg=COR_SIDEBAR, bd=0)
+            lbl_logo.image = logo
+            lbl_logo.pack(pady=(18, 2))
+        except tk.TclError:
+            tk.Label(self.sidebar, text="Sentinela", font=("Segoe UI", 16, "bold"),
+                     bg=COR_SIDEBAR, fg="white").pack(pady=(22, 0))
+        tk.Label(self.sidebar, text="Telemetria e Segurança Veicular",
+                 font=("Segoe UI", 8), bg=COR_SIDEBAR, fg="#b2bec3",
+                 wraplength=180).pack(pady=(0, 18))
 
         for chave, rotulo in [
             ("dados", "Dados"),
@@ -128,6 +189,22 @@ class App:
             "sensores": SensorTab(self.conteudo, self),
             "comparar": CompararTab(self.conteudo, self),
         }
+        for secao in self.secoes.values():
+            self._aplicar_marca_dagua(secao)
+
+    def _aplicar_marca_dagua(self, secao):
+        """Coloca a logo como marca d'água discreta no fundo da seção."""
+        try:
+            img = tk.PhotoImage(
+                file=os.path.join(ASSETS, "sentinela_watermark.png")
+            )
+        except tk.TclError:
+            return
+        marca = tk.Label(secao, image=img, bg=BG, bd=0)
+        marca.image = img
+        marca.place(relx=1.0, rely=1.0, x=-10, y=-10, anchor="se")
+        marca.lower()
+        secao._marca_dagua = marca
 
     # ------------------------------------------------------------------ #
     # Navegação
@@ -247,13 +324,27 @@ class App:
 
 def main():
     root = tk.Tk()
+    root.withdraw()
+    aplicar_icone(root)
+    splash = Splash(root, os.path.join(ASSETS, "sentinela_logo.png"))
+
     api = ApiClient()
     try:
         App(root, api)
     except Exception as erro:  # noqa: BLE001
+        splash.destroy()
+        root.deiconify()
         messagebox.showerror("Erro ao iniciar", str(erro))
         root.destroy()
         raise
+
+    def finalizar():
+        splash.destroy()
+        root.deiconify()
+        root.lift()
+        root.focus_force()
+
+    root.after(1200, finalizar)
     root.mainloop()
 
 
