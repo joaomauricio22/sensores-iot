@@ -16,7 +16,6 @@ velocidade, RPM excessivo e acelerador brusco), com **score de segurança** do c
 ```
 Trabalho_PAV/
 ├── README.md               # Este documento
-├── GUIA-DE-USO.md          # Guia de uso passo a passo (demonstração)
 ├── projeto_api/            # Modelos, API, análise e Docker
 │   ├── entities/           # Classes de modelo (SQLAlchemy)
 │   ├── repositories/       # Operações no banco de dados
@@ -260,6 +259,5 @@ python test_limpeza.py    # testes unitários da limpeza
 
 ## Documentação
 
-- **[Guia de uso](GUIA-DE-USO.md)** — passo a passo da demonstração (subir, cadastrar rota, CRUD, análise).
 - **[Roteiro da apresentação](apresentacao/roteiro-apresentacao.md)** — mapeamento dos 10 itens exigidos.
 - **Slides** — gere com `cd apresentacao && python gerar_slides.py` (saída `slides_pav.pptx`).
