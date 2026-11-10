@@ -18,7 +18,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 IMGS = os.path.join(BASE_DIR, "imgs")
 
 LOGO = os.path.join(IMGS, "logo_sentinela.png")
-WATERMARK = os.path.join(IMGS, "logo_watermark.png")
 
 NAVY = RGBColor(0x0D, 0x1B, 0x2A)
 NAVY_2 = RGBColor(0x17, 0x2A, 0x45)
@@ -132,18 +131,9 @@ def _footer(slide, page):
           bold=True, align=PP_ALIGN.RIGHT)
 
 
-def _watermark(slide, x=7.9, y=4.85, w=4.9):
-    """Marca d'água discreta da logo, atrás do conteúdo."""
-    try:
-        slide.shapes.add_picture(WATERMARK, Inches(x), Inches(y), width=Inches(w))
-    except Exception:
-        pass
-
-
 def _content_slide(number, title, accent=CYAN, page=None):
     slide = prs.slides.add_slide(BLANK)
     _navy_bg(slide)
-    _watermark(slide)
     if number is not None:
         _badge(slide, 0.6, 0.45, 0.62, number, color=accent)
         _text(slide, 1.45, 0.5, 11, 0.7, title, size=30, color=WHITE, bold=True)
@@ -192,7 +182,7 @@ _text(slide, 1.25, 5.5, 10.4, 0.45,
       size=14, color=CYAN, bold=True)
 _shape(slide, MSO_SHAPE.OVAL, 1.0, 6.55, 0.38, 0.38, fill=BLUE)
 _text(slide, 1.55, 6.58, 10.8, 0.35,
-      "João Maurício Araújo Leitão  •  Programação de Aplicações — Trabalho PAV (Parte 6)",
+      "João Maurício Araújo Leitão  •  Trabalho PAV",
       size=13, color=WHITE, bold=True)
 
 # ================================================================ 2. CONTEXTO
@@ -421,7 +411,6 @@ _card(s, 0.6, 5.2, 12.1, 1.5, "Sem expor IDs",
 # ================================================================ telas (capturas)
 s = prs.slides.add_slide(BLANK)
 _navy_bg(s)
-_watermark(s)
 _text(s, 0.6, 0.4, 12, 0.7, "Dados (CRUD) e Visão Geral", size=28, color=WHITE, bold=True)
 _shape(s, MSO_SHAPE.RECTANGLE, 0.65, 1.15, 2.2, 0.06, fill=CYAN)
 _shot(s, os.path.join(IMGS, "rotas.png"), 0.9, 2.1, 3.4, "Rotas (cadastrar / editar / excluir)")
@@ -430,7 +419,6 @@ _footer(s, 11)
 
 s = prs.slides.add_slide(BLANK)
 _navy_bg(s)
-_watermark(s)
 _text(s, 0.6, 0.4, 12, 0.7, "Leituras e Eventos de Risco", size=28, color=WHITE, bold=True)
 _shape(s, MSO_SHAPE.RECTANGLE, 0.65, 1.15, 2.2, 0.06, fill=CYAN)
 _shot(s, os.path.join(IMGS, "leituras.png"), 0.55, 1.5, 5.9, "Leituras (frames de telemetria)")
@@ -439,7 +427,6 @@ _footer(s, 12)
 
 s = prs.slides.add_slide(BLANK)
 _navy_bg(s)
-_watermark(s)
 _text(s, 0.6, 0.4, 12, 0.7, "Sensores e Gráfico", size=28, color=WHITE, bold=True)
 _shape(s, MSO_SHAPE.RECTANGLE, 0.65, 1.15, 2.2, 0.06, fill=CYAN)
 _shot(s, os.path.join(IMGS, "sensores.png"), 0.55, 1.5, 5.9, "Análise por sensor (% fora do limiar)")
@@ -476,7 +463,6 @@ for titulo, texto, cor in difs:
 # ================================================================ 13. OBRIGADO
 slide = prs.slides.add_slide(BLANK)
 _navy_bg(slide, subtle=False)
-_watermark(slide, x=7.9, y=4.85, w=4.9)
 _text(slide, 0.6, 2.5, 12.1, 1.5, "Obrigado!", size=58, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
 _shape(slide, MSO_SHAPE.RECTANGLE, 5.66, 4.15, 2.0, 0.08, fill=CYAN)
 _text(slide, 0.6, 4.55, 12.1, 0.8, "Perguntas?", size=24, color=SOFT, align=PP_ALIGN.CENTER)

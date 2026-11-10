@@ -1,16 +1,18 @@
 """Captura as telas da interface gráfica (para inserir nos slides).
 
-Abre a janela Tkinter com dados de exemplo criados pela API, fotografa cada
-seção e remove a rota de exemplo ao final.
-As imagens são salvas em ../apresentacao/imgs/*.png
+Abre a janela Tkinter com dados sintéticos de telemetria, fotografa cada
+seção e deixa duas rotas de exemplo no banco para facilitar a demonstração.
 
 Executar (com a API no ar):
     python capturar_telas.py
 """
+import math
 import os
+import random
 import sys
 import time
 import tkinter as tk
+from tkinter import messagebox
 
 from PIL import ImageGrab
 
@@ -20,20 +22,89 @@ from main import App
 
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "apresentacao", "imgs")
 
-CSV = """# StartTime = 01/21/2026 08:00:00.0000 AM
-Time (sec), Vehicle speed (km/h), Engine RPM (RPM), Accel X (m/s²), Accel Y (m/s²), Accel Z (m/s²), Absolute throttle position (%), Latitude (deg), Longitude (deg)
-0.0, 0, 800, 0.1, 0.1, 0.1, 5, -22.588833, -43.284300
-1.0, 30, 1500, 0.2, 0.1, 0.1, 10, -22.588900, -43.284300
-2.0, 60, 2500, 0.3, 0.2, 0.1, 20, -22.589000, -43.284300
-3.0, 90, 3500, 0.4, 3.5, 0.2, 30, -22.589100, -43.284300
-4.0, 120, 4500, 0.3, 0.3, 0.2, 40, -22.589200, -43.284300
-5.0, 130, 6000, 0.2, 0.3, 0.2, 60, -22.589300, -43.284300
-6.0, 100, 5000, -0.5, -0.2, 0.1, 40, -22.589400, -43.284300
-7.0, 70, 4000, -0.4, -0.1, 0.1, 30, -22.589500, -43.284300
-8.0, 40, 3000, -0.3, 0.0, 0.1, 20, -22.589600, -43.284300
-9.0, 20, 2000, -0.2, 0.0, 0.1, 10, -22.589700, -43.284300
-10.0, 0, 900, 0.0, 0.0, 0.1, 5, -22.589800, -43.284300
-"""
+
+def _gerar_csv(seed, base_vel, janelas):
+    """Gera um CSV sintético de telemetria com anomalias curtas e isoladas.
+
+    ``janelas`` é uma lista de tuplas ``(tipo, início, duração)`` que descreve
+    cada evento (frenagem/aceleração brusca, curva, excesso de velocidade,
+    RPM excessivo e acelerador brusco). O restante é um cruzeiro suave.
+    """
+    rng = random.Random(seed)
+    dt = 0.5
+    n = 720
+    linhas = [
+        "# StartTime = 01/21/2026 08:00:00.0000 AM",
+        "Time (sec), Vehicle speed (km/h), Engine RPM (RPM), Accel X (m/s²), "
+        "Accel Y (m/s²), Accel Z (m/s²), Absolute throttle position (%), "
+        "Latitude (deg), Longitude (deg)",
+    ]
+    lat0, lon0 = -22.588833, -43.284300
+    speed = base_vel
+    rpm = 850.0 + base_vel * 30.0
+    throttle = 10.0 + base_vel * 0.35
+
+    ativo = {}
+    for tipo, inicio, duracao in janelas:
+        for j in range(duracao):
+            ativo[inicio + j] = tipo
+
+    for i in range(n):
+        t = i * dt
+        k = ativo.get(i)
+        prev = speed
+
+        if k == "fren":
+            speed = max(15.0, speed - 13.0)
+        elif k == "acel":
+            speed = min(115.0, speed + 11.0)
+        elif k == "curva":
+            speed = base_vel + 5.0
+        elif k == "excesso":
+            # Ultrapassa o limite de forma imediata (evento curto e isolado).
+            speed = 108.0
+        elif k == "rpm":
+            speed = base_vel + 4.0
+        elif k == "acelerador":
+            speed = base_vel - 8.0
+        else:
+            # Cruzeiro quase constante, com deriva bem suave.
+            alvo = base_vel + 2.0 * math.sin(i / 60.0)
+            speed += (alvo - speed) * 0.08
+            speed = max(0.0, min(115.0, speed))
+        speed = round(speed, 1)
+
+        if k in ("fren", "acel"):
+            ax = (speed - prev) / 3.6 / dt
+        else:
+            ax = rng.gauss(0.0, 0.04)
+
+        if k == "curva":
+            ay = 4.0 * (1 if i % 2 == 0 else -1)
+        else:
+            ay = rng.gauss(0.0, 0.05)
+
+        az = rng.gauss(0.1, 0.03)
+
+        if k == "rpm":
+            rpm = 6100.0
+        else:
+            rpm = 850.0 + speed * 30.0 + rng.gauss(0, 40)
+        rpm = round(rpm, 0)
+
+        if k == "acelerador":
+            throttle = 75.0
+        else:
+            throttle = 10.0 + speed * 0.35 + rng.gauss(0, 0.5)
+        throttle = round(max(0.0, min(100.0, throttle)), 1)
+
+        lat = lat0 + i * 0.00012
+        lon = lon0 + i * 0.00010
+        linhas.append(
+            f"{t:.1f}, {speed:.1f}, {rpm:.0f}, {ax:.2f}, {ay:.2f}, "
+            f"{az:.2f}, {throttle:.1f}, {lat:.6f}, {lon:.6f}"
+        )
+    return "\n".join(linhas)
 
 
 def capture(widget, name, delay=0.4):
@@ -59,18 +130,48 @@ def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     api = ApiClient()
 
-    # Cria uma rota de exemplo para as capturas.
-    resp = api.importar_csv("Rota de Exemplo", "exemplo.csv", CSV)
-    if resp.status_code not in (200, 201):
-        print("Não foi possível criar a rota de exemplo:", resp.text)
-        return
-    rota_id = resp.json()["rota_id"]
-    api.analisar_rota(rota_id)
+    # Estado de demonstração consistente: remove rotas antigas e importa duas
+    # rotas sintéticas com perfis de condução distintos.
+    resp = api.list_rotas()
+    if resp.status_code == 200:
+        for rota in resp.json():
+            api.excluir_rota(rota["id"])
+
+    # Ambos os trajetos compartilham os mesmos tipos de evento (para que o
+    # modelo de ML os considere "típicos" entre si), variando a intensidade.
+    janelas_agressivo = [
+        ("fren", 160, 1),
+        ("acel", 300, 1),
+        ("curva", 400, 2),
+        ("excesso", 520, 2),
+        ("rpm", 560, 1),
+        ("acelerador", 600, 1),
+    ]
+    janelas_defensivo = [
+        ("curva", 400, 2),
+        ("excesso", 520, 2),
+        ("rpm", 560, 1),
+    ]
+
+    rotas = [
+        ("Condução Agressiva", _gerar_csv(1, 70.0, janelas_agressivo)),
+        ("Condução Defensiva", _gerar_csv(2, 70.0, janelas_defensivo)),
+    ]
+    ids = []
+    for nome, csv_texto in rotas:
+        resp = api.importar_csv(nome, f"{nome}.csv", csv_texto)
+        if resp.status_code not in (200, 201):
+            print(f"Não foi possível criar '{nome}':", resp.text)
+            return
+        ids.append(resp.json()["rota_id"])
+    rota_a, rota_b = ids
+    api.analisar_rota(rota_a)
+    api.analisar_rota(rota_b)
 
     root = tk.Tk()
     root.attributes("-topmost", True)
     app = App(root, api)
-    app.definir_rota(rota_id)
+    app.definir_rota(rota_a)
     root.update()
     root.lift()
     root.focus_force()
@@ -78,6 +179,7 @@ def main():
     # Dados → Rotas / Leituras / Eventos
     app.mostrar("dados")
     app.secoes["dados"].notebook.select(app.secoes["dados"].rota_tab)
+    app.secoes["dados"].rota_tab.atualizar()
     root.update()
     capture(root, "rotas.png")
 
@@ -96,16 +198,26 @@ def main():
         ("visao", "dashboard.png", 0.5),
         ("grafico", "grafico.png", 0.7),
         ("sensores", "sensores.png", 0.6),
-        ("comparar", "comparar.png", 0.4),
     ]:
         app.mostrar(chave)
         root.update()
         capture(root, nome, delay)
 
-    root.destroy()
+    # Comparar: duas rotas, sem caixas de diálogo bloqueando a captura.
+    app.mostrar("comparar")
+    root.update()
+    comp = app.secoes["comparar"]
+    comp.combo_a.current(0)
+    comp.combo_b.current(1)
+    original = messagebox.showinfo
+    messagebox.showinfo = lambda *a, **k: None
+    try:
+        comp.comparar()
+    finally:
+        messagebox.showinfo = original
+    capture(root, "comparar.png", delay=0.6)
 
-    # Remove a rota de exemplo para deixar o banco como estava.
-    api.excluir_rota(rota_id)
+    root.destroy()
     print("Capturas concluídas.")
 
 

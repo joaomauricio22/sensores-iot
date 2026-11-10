@@ -64,7 +64,11 @@ class ModeloMLDetector(DetectorAnomalia):
                     "forca_g": matriz_alvo[i][3],
                     "instabilidade": matriz_alvo[i][1],
                     "classificacao": "Comportamento atípico",
-                    "descricao": "Evento de risco classificado pelo modelo DBSCAN + RandomForest.",
+                    "descricao": (
+                        "Anomalia multivariada detectada pelo modelo de ML "
+                        "(DBSCAN + RandomForest) a partir da combinação de "
+                        "aceleração, instabilidade e Força G."
+                    ),
                 })
         return eventos
 

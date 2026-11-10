@@ -44,8 +44,9 @@ class EstatisticoDetector(DetectorAnomalia):
                     "instabilidade": instabilidade_janela(acels, i),
                     "classificacao": "Comportamento atípico",
                     "descricao": (
-                        f"Força G de {fg:.2f} m/s² com z-score {zscore:.1f} "
-                        f"(acima de {limiar:.1f})."
+                        f"Anomalia estatística da Força G: {fg:.2f} m/s² "
+                        f"(z-score {zscore:.1f}, acima do limiar {limiar:.1f}) — "
+                        f"desvio do padrão histórico de condução da rota."
                     ),
                 })
         return eventos

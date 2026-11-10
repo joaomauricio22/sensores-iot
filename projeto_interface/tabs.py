@@ -14,7 +14,7 @@ from datetime import datetime
 from tkinter import filedialog, messagebox, ttk
 
 import requests
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 
 from api_client import extract_error
@@ -348,43 +348,66 @@ class RotaTab(tk.Frame):
         self.lbl_status.configure(text=f"{len(self.rotas)} rota(s)")
 
     def nova(self):
-        # "Nova rota" = importar um CSV de telemetria. A rota é criada junto
-        # com as suas leituras (cadastro em lote), conforme o fluxo do sistema.
-        caminho = filedialog.askopenfilename(
-            title="Selecionar arquivo de telemetria", filetypes=[("CSV", "*.csv")],
+        # "Nova rota" = importar um ou mais CSVs de telemetria. Cada arquivo
+        # vira uma rota (cadastro em lote), conforme o fluxo do sistema.
+        caminhos = filedialog.askopenfilenames(
+            title="Selecionar arquivo(s) de telemetria",
+            filetypes=[("CSV", "*.csv"), ("Todos os arquivos", "*.*")],
         )
-        if not caminho:
+        if not caminhos:
             return
-        dialogo = FormDialog(self, "Nova rota", [
-            {"chave": "nome", "rotulo": "Nome da rota", "tipo": "texto", "obrigatorio": True},
-        ], valores={"nome": os.path.splitext(os.path.basename(caminho))[0]})
-        if dialogo.resultado is None:
+
+        caminhos = list(caminhos)
+        self.lbl_status.configure(text=f"Importando 0/{len(caminhos)}…")
+
+        def importar_todos():
+            resultados = []
+            for indice, caminho in enumerate(caminhos, start=1):
+                nome = os.path.splitext(os.path.basename(caminho))[0]
+                try:
+                    with open(caminho, encoding="utf-8-sig", errors="replace") as arquivo:
+                        conteudo = arquivo.read()
+                except OSError as erro:
+                    resultados.append((nome, False, f"Não foi possível ler: {erro}"))
+                    continue
+                try:
+                    resp = self.app.api.importar_csv(
+                        nome, os.path.basename(caminho), conteudo
+                    )
+                except requests.exceptions.RequestException as erro:
+                    resultados.append((nome, False, f"Erro de comunicação: {erro}"))
+                    continue
+                if resp.status_code in (200, 201):
+                    dados = resp.json()
+                    limpeza = dados.get("limpeza", {})
+                    resultados.append((
+                        nome, True,
+                        f"{dados.get('total_leituras', 0)} leituras · "
+                        f"{limpeza.get('total_removido', 0)} descartadas",
+                    ))
+                else:
+                    resultados.append((nome, False, extract_error(resp)))
+            return resultados
+
+        self.app.carregar_async(importar_todos, self._render_importacao)
+
+    def _render_importacao(self, resultados):
+        if isinstance(resultados, dict) and "__erro__" in resultados:
+            self.lbl_status.configure(text="Erro ao importar.")
             return
-        try:
-            with open(caminho, encoding="utf-8-sig", errors="replace") as arquivo:
-                conteudo = arquivo.read()
-        except OSError as erro:
-            messagebox.showerror("Erro", f"Não foi possível ler o arquivo:\n{erro}")
-            return
-        try:
-            resp = self.app.api.importar_csv(
-                dialogo.resultado["nome"], os.path.basename(caminho), conteudo
-            )
-        except requests.exceptions.RequestException as erro:
-            _erro_conexao(erro)
-            return
-        if resp.status_code in (200, 201):
-            dados = resp.json()
-            limpeza = dados.get("limpeza", {})
-            messagebox.showinfo(
-                "Rota criada",
-                f"{dados.get('total_leituras', 0)} leituras importadas.\n"
-                f"Leituras descartadas: {limpeza.get('total_removido', 0)}\n"
-                f"Spikes ajustados: {limpeza.get('acelerometro_ajustado', 0)}",
-            )
-            self.app.recarregar_rotas(selecionar=dados.get("rota_id"))
-        else:
-            _erro_api(resp)
+        criadas = [r for r in resultados if r[1]]
+        falhas = [r for r in resultados if not r[1]]
+        self.lbl_status.configure(text=f"{len(criadas)} rota(s) criada(s)")
+
+        linhas = [f"{len(criadas)} rota(s) criada(s) com sucesso:"]
+        linhas += [f"  • {nome} — {detalhe}" for nome, _ok, detalhe in criadas]
+        if falhas:
+            linhas.append("")
+            linhas.append(f"{len(falhas)} falha(s):")
+            linhas += [f"  • {nome} — {detalhe}" for nome, _ok, detalhe in falhas]
+        messagebox.showinfo("Importação concluída", "\n".join(linhas))
+
+        self.app.recarregar_rotas()
 
     def editar(self):
         rota_id = self._get_selecionada()
@@ -1069,8 +1092,11 @@ class GraficoTab(tk.Frame):
 
     def _build(self):
         _titulo(self, "Comportamento da Rota",
-                "Linhas tracejadas = limiares configurados. Passe o mouse para ver os valores.")
-        self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=15, pady=(5, 15))
+                "Linhas tracejadas = limiares configurados. Use a barra abaixo para dar zoom.")
+        self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=15, pady=(5, 0))
+        self.toolbar = NavigationToolbar2Tk(self.canvas, self)
+        self.toolbar.update()
+        self.toolbar.pack(fill="x", padx=15, pady=(0, 8))
         self.canvas.mpl_connect("motion_notify_event", self._on_hover)
         self.plotar()
 
@@ -1246,7 +1272,10 @@ class SensorTab(tk.Frame):
             self.tree.column(chave, width=largura, anchor=ancora)
         self.tree.pack(fill="both", expand=True)
 
-        self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=20, pady=(0, 15))
+        self.canvas.get_tk_widget().pack(fill="both", expand=True, padx=20, pady=(0, 0))
+        self.toolbar = NavigationToolbar2Tk(self.canvas, self)
+        self.toolbar.update()
+        self.toolbar.pack(fill="x", padx=20, pady=(0, 10))
 
     def atualizar(self):
         rota_id = self.app.rota_atual_id
