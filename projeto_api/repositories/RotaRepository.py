@@ -24,3 +24,16 @@ class RotaRepository:
         db.session.delete(rota)
         db.session.commit()
         return rota
+
+    def invalidar_analises(self):
+        """Marca todas as rotas como pendentes de reanálise.
+
+        O modelo de ML treina com as leituras das OUTRAS rotas (histórico);
+        criar (importação) ou excluir uma rota muda esse histórico para todas as
+        demais, então as análises delas ficam obsoletas e devem ser refeitas na
+        próxima consulta a resumo/gráfico.
+        """
+        db.session.query(Rota).update(
+            {Rota.data_analise: None}, synchronize_session=False
+        )
+        db.session.commit()

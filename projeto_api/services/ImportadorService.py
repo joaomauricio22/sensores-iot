@@ -8,6 +8,7 @@ from marshmallow import ValidationError
 from entities.Base import db
 from entities.Leitura import Leitura
 from entities.Rota import Rota
+from repositories.RotaRepository import RotaRepository
 from services.limpeza import limpar_leituras
 
 
@@ -96,6 +97,11 @@ class ImportadorService:
         except Exception:
             db.session.rollback()
             raise
+
+        # A nova rota muda o histórico de ML das demais (o modelo treina com as
+        # leituras das outras rotas): invalida a análise de todas para que a
+        # próxima consulta as reanálise com o histórico atualizado.
+        RotaRepository().invalidar_analises()
 
         return {
             "rota_id": rota.id,

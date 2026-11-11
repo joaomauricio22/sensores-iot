@@ -167,7 +167,10 @@ registros permanecem na tabela `evento_risco` (Regra 9).
 Cada rota guarda o instante da última análise (`rota.data_analise`). A análise é
 executada automaticamente quando a rota é criada (importação) e **reagendada** sempre que
 uma leitura é criada, editada ou excluída (o campo é invalidado por
-`LeituraService.__invalidar_analise`).
+`LeituraService.__invalidar_analise`). Como o modelo de ML treina com as leituras das
+**outras** rotas (histórico), importar ou excluir uma rota também invalida a análise de
+todas as demais (`RotaRepository.invalidar_analises`), para que os eventos não fiquem
+obsoletos em relação ao histórico.
 
 - **Análise automática** (`resumo`/`gráfico`): acrescenta apenas os eventos novos,
   preservando os já existentes — inclusive os cadastrados manualmente via CRUD

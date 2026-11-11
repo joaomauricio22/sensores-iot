@@ -48,4 +48,8 @@ class RotaService:
             return None
         # O banco está configurado com ON DELETE CASCADE: as leituras e os
         # eventos vinculados são removidos automaticamente.
-        return self.__repository.delete(rota)
+        resultado = self.__repository.delete(rota)
+        # Remover uma rota muda o histórico de ML das demais (que treinam com as
+        # leituras das outras rotas), então todas ficam pendentes de reanálise.
+        self.__repository.invalidar_analises()
+        return resultado
