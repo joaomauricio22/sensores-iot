@@ -27,6 +27,13 @@ PESOS_SCORE = {
     "Comportamento atípico": 1,
 }
 
+# Normalização do score pela exposição da rota: a penalidade é dividida pela
+# distância percorrida (densidade de risco por km), evitando que rotas longas
+# acumulem penalidade apenas por serem longas (e saturem em 0).
+FATOR_SCORE_KM = 2.0      # pontos de desconto por unidade de "penalidade/km"
+FATOR_SCORE_MINUTO = 0.6  # fallback sem GPS (~18 km/h => 0,3 km/min × 2,0)
+MIN_KM = 1.0              # exposição mínima para rotas muito curtas
+
 
 # Camada de serviço responsável pela ANÁLISE da telemetria.
 #   - Executa os detectores de risco (limite, estatístico e ML);
@@ -201,9 +208,22 @@ class AnaliseService:
         distancia = self.__calcular_distancia(leituras)
 
         eventos_por_tipo = {}
+        leituras_por_tipo = {}
         for e in eventos:
             tipo = e.classificacao or "Comportamento atípico"
-            eventos_por_tipo[tipo] = eventos_por_tipo.get(tipo, 0) + 1
+            # Conta leituras DISTINTAS por classificação: a mesma leitura pode
+            # ser sinalizada por dois métodos (ex.: ESTATISTICO e MODELO_ML
+            # como "Comportamento atípico"), mas representa um único instante
+            # de risco. A persistência mantém os dois registros (Regra 9);
+            # apenas o resumo/score evita contar em dobro.
+            leituras_por_tipo.setdefault(tipo, set()).add(e.leitura_id)
+        eventos_por_tipo = {
+            tipo: len(ids) for tipo, ids in leituras_por_tipo.items()
+        }
+        penalidade = sum(
+            PESOS_SCORE.get(tipo, 1) * qtd
+            for tipo, qtd in eventos_por_tipo.items()
+        )
 
         return {
             "rota_id": rota_id,
@@ -213,9 +233,9 @@ class AnaliseService:
             "velocidade_media": round(self.__velocidade_media(leituras), 1),
             "velocidade_maxima": round(max(velocidades), 1) if velocidades else 0.0,
             "rpm_maximo": round(max(rpms), 1) if rpms else 0.0,
-            "total_eventos": len(eventos),
+            "total_eventos": sum(eventos_por_tipo.values()),
             "eventos_por_tipo": eventos_por_tipo,
-            "score": self.__calcular_score(eventos_por_tipo),
+            "score": self.__calcular_score(penalidade, distancia, duracao),
         }
 
     def comparar_rotas(self, rota_ids: list):
@@ -271,10 +291,20 @@ class AnaliseService:
             tempo_total += dt
         return total / tempo_total if tempo_total else 0.0
 
-    def __calcular_score(self, eventos_por_tipo: dict) -> int:
-        """Score de segurança: começa em 100 e desconta conforme a severidade."""
-        penalidade = sum(
-            PESOS_SCORE.get(tipo, 1) * qtd
-            for tipo, qtd in eventos_por_tipo.items()
-        )
-        return max(0, 100 - penalidade)
+    def __calcular_score(self, penalidade: float, distancia_km: float,
+                         duracao_segundos: float) -> int:
+        """Score de segurança (0-100) normalizado pela exposição da rota.
+
+        A penalidade (soma dos pesos × ocorrências) é dividida pela distância
+        percorrida, medindo a *densidade* de risco (por km). Isso evita que
+        rotas longas acumulem penalidade apenas por serem longas (e saturem em
+        0) e torna rotas de tamanhos diferentes comparáveis.
+        """
+        if penalidade <= 0:
+            return 100
+        if distancia_km and distancia_km >= 0.1:
+            desconto = FATOR_SCORE_KM * penalidade / max(distancia_km, MIN_KM)
+        else:
+            # Sem GPS: usa a duração como aproximação de exposição (~18 km/h).
+            desconto = FATOR_SCORE_MINUTO * penalidade / max(duracao_segundos / 60.0, 1.0)
+        return max(0, min(100, round(100 - desconto)))

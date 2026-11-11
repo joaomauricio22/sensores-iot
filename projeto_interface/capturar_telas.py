@@ -161,12 +161,21 @@ def main():
     # Ambos os trajetos compartilham os mesmos tipos de evento (para que o
     # modelo de ML os considere "típicos" entre si), variando a intensidade.
     janelas_agressivo = [
-        ("fren", 160, 1),
-        ("acel", 300, 1),
-        ("curva", 400, 2),
-        ("excesso", 510, 11),
+        ("fren", 60, 1),
+        ("acel", 90, 1),
+        ("curva", 140, 2),
+        ("fren", 200, 1),
+        ("acel", 230, 1),
+        ("acelerador", 270, 1),
+        ("curva", 320, 2),
+        ("fren", 380, 1),
+        ("acel", 410, 1),
+        ("curva", 460, 2),
+        ("excesso", 520, 11),
         ("rpm", 560, 1),
-        ("acelerador", 600, 1),
+        ("acelerador", 590, 1),
+        ("fren", 640, 1),
+        ("acel", 670, 1),
     ]
     janelas_defensivo = [
         ("curva", 400, 2),

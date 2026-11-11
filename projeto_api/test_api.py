@@ -200,6 +200,12 @@ def main():
             r = requests.get(f"{BASE}/rotas/{rota_csv_id}/resumo")
             show("GET resumo com score (200)",
                  r.status_code == 200 and "score" in r.json())
+            resumo = r.json()
+            show("score no intervalo 0-100",
+                 0 <= resumo.get("score", -1) <= 100, str(resumo.get("score")))
+            show("total_eventos consistente com eventos_por_tipo",
+                 resumo.get("total_eventos", -1) == sum(resumo.get("eventos_por_tipo", {}).values()),
+                 str(resumo.get("total_eventos")))
             r = requests.post(f"{BASE}/rotas/comparar",
                               json={"rota_ids": [rota_csv_id, rota_id]})
             show("POST comparar rotas (200)",

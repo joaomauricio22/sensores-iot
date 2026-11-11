@@ -151,12 +151,16 @@ As 10 regras (texto original, conforme enviadas na Parte 1):
 
 A Força G resultante é `√(ax² + ay²)`; a instabilidade é o desvio padrão da aceleração
 numa janela de ~3 s. O limiar da Força G resultante é `forca_g_max` (padrão 3,0 m/s²;
-quando ausente no JSON, usa `lateral_max`). O **score de segurança** (0–100) desconta
-pontos conforme a severidade dos eventos detectados.
+quando ausente no JSON, usa `lateral_max`).
 
-> **Limitação do score:** a penalidade é contada por evento (não normalizada por
-> distância/duração). Rotas muito longas tendem a acumular mais eventos e, portanto, a
-> score menor que rotas curtas. A comparação entre rotas deve considerar isso.
+O **score de segurança** (0–100) começa em 100 e desconta pontos conforme a severidade
+de cada tipo de evento (`PESOS_SCORE`). A penalidade é **normalizada pela distância
+percorrida** (densidade de risco por km): isso evita que rotas longas acumulem pontos
+apenas por serem longas (e saturem em 0) e torna rotas de tamanhos diferentes
+comparáveis. Quando a rota não tem GPS, a duração é usada como aproximação de
+exposição. A mesma leitura sinalizada por dois métodos distintos (ex.: z-score e ML
+como "Comportamento atípico") é contada **uma única vez** no resumo/score — os dois
+registros permanecem na tabela `evento_risco` (Regra 9).
 
 ### Análise idempotente e reanálise
 
