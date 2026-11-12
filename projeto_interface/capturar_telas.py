@@ -201,6 +201,9 @@ def main():
     root = tk.Tk()
     root.attributes("-topmost", True)
     app = App(root, api)
+    # Captura em tela cheia: maximiza a janela (mantém a barra de título) antes
+    # de fotografar cada seção. No Windows, 'zoomed' ocupa toda a área útil.
+    root.state("zoomed")
     app.definir_rota(rota_a)
     root.update()
     root.lift()

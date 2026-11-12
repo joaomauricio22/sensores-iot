@@ -231,6 +231,9 @@ Comportamentos da interface:
 - **Gráfico** e **Sensores** têm barra de **zoom/pan** (matplotlib).
 - No **Gráfico**, o seletor **"Painel"** (barra superior) permite exibir um único
   canal (Velocidade, Força G ou RPM) em tela cheia ou os três empilhados (**Todos**).
+- Na **Visão Geral**, o botão **"Relatório visual (HTML)"** gera um relatório
+  autocontido (logo + cards + gráficos + tabelas) que abre no navegador e imprime
+  em PDF; o botão **"Exportar dados (CSV)"** exporta os dados brutos do resumo.
 - Se a API estiver fora do ar, a interface mostra **"API offline"** com o botão
   **"Tentar novamente"** e tenta reconectar sozinha.
 
@@ -244,6 +247,10 @@ python reanalisar.py      # reanalisa as rotas com os limiares atuais do JSON
 python avaliar_ml.py      # métricas do detector de ML
 python test_api.py        # testes de integração (com a API no ar)
 python test_limpeza.py    # testes unitários da limpeza
+
+cd ../projeto_interface
+python gerar_relatorio.py 104          # relatório visual (HTML) sem abrir a GUI
+python capturar_telas.py --sim         # recria as rotas demo e captura as telas
 ```
 
 ## Endpoints principais
@@ -277,3 +284,8 @@ python test_limpeza.py    # testes unitários da limpeza
 ## Documentação
 
 - **Slides** — gere com `cd apresentacao && python gerar_slides.py` (saída `slides_pav.pptx`).
+- **Slide de coleta (IoT)** — coloque a foto do adaptador em
+  `apresentacao/imgs/obdlink.jpg` (ou `.png`); o gerador a insere automaticamente
+  (sem a foto, exibe um espaço reservado).
+- **Capturas de tela** — `python capturar_telas.py --sim` (com a API no ar) recria
+  as rotas de demonstração e fotografa cada seção com a janela **maximizada**.

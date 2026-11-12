@@ -13,6 +13,7 @@ from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Inches, Pt
+from PIL import Image
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 IMGS = os.path.join(BASE_DIR, "imgs")
@@ -159,10 +160,15 @@ def _card(slide, l, t, w, h, title, body, accent, title_size=15, body_size=12.5)
 
 
 def _shot(slide, path, x, y, w, cap):
-    _shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, x - 0.06, y - 0.06, w + 0.12, w * 0.64 + 0.12,
+    # Proporção lida da própria imagem (16:10, 16:9 etc.): a moldura acompanha
+    # o tamanho real da captura, sem faixas vazias.
+    with Image.open(path) as img:
+        proporcao = img.height / img.width
+    frame_h = w * proporcao
+    _shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, x - 0.06, y - 0.06, w + 0.12, frame_h + 0.12,
            fill=NAVY_3, line=NAVY_3, radius=0.04)
     slide.shapes.add_picture(path, Inches(x), Inches(y), width=Inches(w))
-    _text(slide, x, y + w * 0.64 + 0.1, w, 0.4, cap, size=12, color=SOFT, bold=True,
+    _text(slide, x, y + frame_h + 0.1, w, 0.4, cap, size=12, color=SOFT, bold=True,
           align=PP_ALIGN.CENTER)
 
 
@@ -185,8 +191,52 @@ _text(slide, 1.55, 6.58, 10.8, 0.35,
       "João Maurício Araújo Leitão  •  Trabalho PAV",
       size=13, color=WHITE, bold=True)
 
+
+def _imagem_obd():
+    """Foto do adaptador OBD-II (obdlink.jpg/png) na pasta de imagens."""
+    for nome in ("obdlink.jpg", "obdlink.png", "obdlink.jpeg"):
+        caminho = os.path.join(IMGS, nome)
+        if os.path.exists(caminho):
+            return caminho
+    return None
+
+
+# ================================================================ 2. COLETA
+s = _content_slide(None, "Coleta de Dados — o Sensor IoT", accent=BLUE, page=2)
+foto = _imagem_obd()
+if foto:
+    with Image.open(foto) as img:
+        proporcao = img.height / img.width
+    w = 5.4
+    h = w * proporcao
+    # Limita a altura (fotos quadradas/verticais não podem invadir o rodapé).
+    if h > 4.6:
+        h = 4.6
+        w = h / proporcao
+    _shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, 0.6 - 0.06, 1.7 - 0.06, w + 0.12, h + 0.12,
+           fill=NAVY_3, radius=0.04)
+    s.shapes.add_picture(foto, Inches(0.6), Inches(1.7), width=Inches(w))
+    _text(s, 0.6, 1.7 + h + 0.12, w, 0.4,
+          "Adaptador OBD-II — a interface de diagnóstico do veículo",
+          size=11, color=SOFT, align=PP_ALIGN.CENTER)
+else:
+    _shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, 0.6, 1.7, 5.4, 4.1, fill=CARD, radius=0.06)
+    _text(s, 0.9, 2.0, 4.9, 3.7,
+          "Foto do adaptador OBD-II\n\n(colocar a imagem em\napresentacao/imgs/obdlink.jpg)",
+          size=16, color=TEXT_DIM, align=PP_ALIGN.CENTER)
+
+_text(s, 6.6, 1.8, 6.2, 5.2,
+      "O ponto de partida dos dados\n\n"
+      "• Adaptador OBD-II (ex.: OBDLink MX+)\n"
+      "• Porta OBD-II do veículo (diagnóstico)\n"
+      "• App de aquisição → exportação em CSV\n"
+      "• ~1 leitura por segundo\n"
+      "• Canais: velocidade, RPM, aceleração X/Y/Z,\n"
+      "  posição do acelerador e GPS",
+      size=15, color=TEXT)
+
 # ================================================================ 2. CONTEXTO
-s = _content_slide(1, "Contexto do Sistema", accent=BLUE, page=2)
+s = _content_slide(1, "Contexto do Sistema", accent=BLUE, page=3)
 _cards = [
     ("Receber", "Dados de telemetria coletados pela interface OBD-II do veículo.", BLUE),
     ("Padronizar", "Normaliza nomes de colunas de fontes diferentes para parâmetros canônicos.", PURPLE),
@@ -207,7 +257,7 @@ _text(s, 7.0, 1.85, 5.7, 5.0,
       size=16, color=TEXT)
 
 # ================================================================ 3. PROBLEMA
-s = _content_slide(2, "Problema que o Sistema Resolve", accent=PURPLE, page=3)
+s = _content_slide(2, "Problema que o Sistema Resolve", accent=PURPLE, page=4)
 _problemas = [
     ("Volume de dados", "O OBD-II gera milhares de leituras por viagem — análise manual é inviável.", BLUE),
     ("Riscos silenciosos", "Frenagens bruscas e curvas fechadas podem passar despercebidas.", RED),
@@ -224,7 +274,7 @@ _text(s, 0.6, 5.3, 12.1, 1.3,
       size=18, color=WHITE, bold=True, align=PP_ALIGN.CENTER)
 
 # ================================================================ 4. REQUISITOS
-s = _content_slide(3, "Requisitos Principais — 10 regras de negócio", accent=RED, page=4)
+s = _content_slide(3, "Requisitos Principais — 10 regras de negócio", accent=RED, page=5)
 _regras = [
     ("Cada sensor possui um identificador único.", BLUE),
     ("Leitura exige sensor, valor e data/hora.", PURPLE),
@@ -247,7 +297,7 @@ for i, (regra, cor) in enumerate(_regras):
     _text(s, x + 0.85, y + 0.21, 4.9, 0.5, regra, size=13.5, color=TEXT)
 
 # ================================================================ 5. MODELO DE DADOS
-s = _content_slide(4, "Modelo do Banco de Dados", accent=TEAL, page=5)
+s = _content_slide(4, "Modelo do Banco de Dados", accent=TEAL, page=6)
 entidades = [
     ("rota", "nome\narquivo de origem\ndata de importação", BLUE),
     ("leitura", "velocidade, rpm\naccel_x/y/z\nacelerador, GPS", TEAL),
@@ -271,7 +321,7 @@ _card(s, 0.7, 5.9, 12, 1.0, "Padronização de parâmetros (back-end)",
       CYAN, title_size=14, body_size=12.5)
 
 # ================================================================ 6. ARQUITETURA
-s = _content_slide(5, "Arquitetura da Aplicação", accent=BLUE, page=6)
+s = _content_slide(5, "Arquitetura da Aplicação", accent=BLUE, page=7)
 camadas = [
     ("entities", "Classes que mapeiam as tabelas (SQLAlchemy)", BLUE),
     ("repositories", "Operações no banco: SELECT / INSERT / UPDATE / DELETE", PURPLE),
@@ -290,7 +340,7 @@ _card(s, 0.5, 5.7, 12.3, 0.9, "Fluxo de uma requisição",
       CYAN, title_size=13.5, body_size=14)
 
 # ================================================================ 7. CLASSES
-s = _content_slide(6, "Principais Classes", accent=PURPLE, page=7)
+s = _content_slide(6, "Principais Classes", accent=PURPLE, page=8)
 _text(s, 0.6, 1.5, 12, 0.5, "Herança e polimorfismo na detecção de risco:",
       size=16, color=WHITE, bold=True)
 base = _shape(s, MSO_SHAPE.ROUNDED_RECTANGLE, 4.45, 1.95, 4.4, 0.7, fill=NAVY_3, radius=0.18)
@@ -319,7 +369,7 @@ for titulo, texto, cor in _cards2:
     y += 0.88
 
 # ================================================================ 8. DETECÇÃO (extra)
-s = _content_slide(None, "Detecção de Risco — 3 métodos", accent=RED, page=8)
+s = _content_slide(None, "Detecção de Risco — 3 métodos", accent=RED, page=9)
 metodos = [
     ("1", "LIMITE", "Aceleração longitudinal\nfora dos limites do CTB\n(+2,5 / -3,0 m/s²).", BLUE),
     ("2", "ESTATÍSTICO", "z-score (|z| > 3) da Força G\nem relação ao histórico\nda rota.", PURPLE),
@@ -338,7 +388,7 @@ _text(s, 0.6, 5.35, 12.1, 1.3,
       size=13.5, color=TEXT_DIM, align=PP_ALIGN.CENTER)
 
 # ================================================================ 9. ENDPOINTS
-s = _content_slide(7, "Endpoints da API", accent=BLUE, page=9)
+s = _content_slide(7, "Endpoints da API", accent=BLUE, page=10)
 headers = ["Método", "Rota", "Descrição"]
 rows = [
     ("GET / POST", "/telemetria/rotas", "Listar / cadastrar rotas"),
@@ -386,7 +436,7 @@ table.columns[1].width = Inches(4.4)
 table.columns[2].width = Inches(5.3)
 
 # ================================================================ 10. INTERFACE
-s = _content_slide(8, "Interface Gráfica", accent=TEAL, page=10)
+s = _content_slide(8, "Interface Gráfica", accent=TEAL, page=11)
 passos = [
     ("1. Dados", "CRUD de rotas, leituras e eventos", BLUE),
     ("2. Cadastrar", "CSV vira uma rota nomeada", PURPLE),
@@ -415,7 +465,7 @@ _text(s, 0.6, 0.4, 12, 0.7, "Dados (CRUD) e Visão Geral", size=28, color=WHITE,
 _shape(s, MSO_SHAPE.RECTANGLE, 0.65, 1.15, 2.2, 0.06, fill=CYAN)
 _shot(s, os.path.join(IMGS, "rotas.png"), 0.9, 2.1, 3.4, "Rotas (cadastrar / editar / excluir)")
 _shot(s, os.path.join(IMGS, "dashboard.png"), 4.9, 1.4, 7.8, "Visão Geral: score + estatísticas")
-_footer(s, 11)
+_footer(s, 12)
 
 s = prs.slides.add_slide(BLANK)
 _navy_bg(s)
@@ -423,7 +473,7 @@ _text(s, 0.6, 0.4, 12, 0.7, "Leituras e Eventos de Risco", size=28, color=WHITE,
 _shape(s, MSO_SHAPE.RECTANGLE, 0.65, 1.15, 2.2, 0.06, fill=CYAN)
 _shot(s, os.path.join(IMGS, "leituras.png"), 0.55, 1.5, 5.9, "Leituras (frames de telemetria)")
 _shot(s, os.path.join(IMGS, "eventos.png"), 6.9, 1.5, 5.9, "Eventos de risco (filtro por tipo)")
-_footer(s, 12)
+_footer(s, 13)
 
 s = prs.slides.add_slide(BLANK)
 _navy_bg(s)
@@ -431,24 +481,78 @@ _text(s, 0.6, 0.4, 12, 0.7, "Sensores e Gráfico", size=28, color=WHITE, bold=Tr
 _shape(s, MSO_SHAPE.RECTANGLE, 0.65, 1.15, 2.2, 0.06, fill=CYAN)
 _shot(s, os.path.join(IMGS, "sensores.png"), 0.55, 1.5, 5.9, "Análise por sensor (% fora do limiar)")
 _shot(s, os.path.join(IMGS, "grafico.png"), 6.9, 1.5, 5.9, "Gráfico em painel (velocidade, Força G, RPM)")
-_footer(s, 13)
+_footer(s, 14)
 
 # ================================================================ 11. DEMONSTRAÇÃO
-s = _content_slide(9, "Demonstração do Funcionamento", accent=ORANGE, page=14)
+s = _content_slide(9, "Demonstração do Funcionamento", accent=ORANGE, page=15)
 demos = [
     ("Cadastro em lote", "Arquivos CSV importados e padronizados como rotas.", BLUE),
     ("CRUD completo", "Criar/ler/editar/excluir rotas, leituras e eventos.", PURPLE),
     ("Regras de negócio", "Ex.: leitura de rota inexistente, leitura duplicada.", TEAL),
     ("Análise + classificações", "6 tipos de evento detectados pelos 3 métodos.", ORANGE),
-    ("Dashboard, sensores e score", "Score 0–100, gráfico, análise por sensor e comparação.", RED),
+    ("Dashboard, sensores e score", "Score 0–100, gráfico, análise por sensor e comparação.", ORANGE),
+    ("Relatório", "Relatório visual (HTML) e exportação dos dados (CSV).", RED),
 ]
-y = 1.7
+y = 1.6
 for titulo, texto, cor in demos:
     _card(s, 0.6, y, 12.1, 0.82, titulo, texto, cor, title_size=14, body_size=13.5)
-    y += 1.02
+    y += 0.88
+
+# ================================================================ 11. RESULTADOS
+s = _content_slide(None, "Resultados — perfil de condução", accent=TEAL, page=16)
+# Snapshot do banco na data da apresentação. Se reimportar/alterar as rotas,
+# atualize estes números (ou gere de novo com capturar_telas.py).
+_resultados = [
+    ("Condução Defensiva (demonstração)", 88, 19, "7,10 km"),
+    ("Condução Agressiva (demonstração)", 56, 70, "7,07 km"),
+    ("Rota real 1 — rota_1", 57, 49, "5,47 km"),
+    ("Rota real 2 — CSVLog 08h", 59, 142, "15,67 km"),
+    ("Rota real 3 — CSVLog 15h", 70, 90, "8,78 km"),
+]
+cabecalhos = ["Rota", "Score", "Eventos", "Distância"]
+gf = s.shapes.add_table(len(_resultados) + 1, 4, Inches(0.6), Inches(1.7),
+                        Inches(12.1), Inches(4.0))
+tabela = gf.table
+for j, h in enumerate(cabecalhos):
+    c = tabela.cell(0, j)
+    c.text = h
+    c.fill.solid()
+    c.fill.fore_color.rgb = NAVY_3
+    for p in c.text_frame.paragraphs:
+        p.alignment = PP_ALIGN.CENTER
+        for r in p.runs:
+            r.font.bold = True
+            r.font.size = Pt(14)
+            r.font.color.rgb = WHITE
+            r.font.name = FONT
+for i, (nome, score, eventos, dist) in enumerate(_resultados, start=1):
+    for j, val in enumerate([nome, str(score), str(eventos), dist]):
+        c = tabela.cell(i, j)
+        c.text = val
+        c.fill.solid()
+        c.fill.fore_color.rgb = CARD if i % 2 == 1 else CARD_2
+        for p in c.text_frame.paragraphs:
+            for r in p.runs:
+                r.font.size = Pt(13)
+                r.font.color.rgb = TEXT
+                r.font.name = FONT
+    cor = RGBColor(0x00, 0xB8, 0x94) if score >= 80 else (
+        RGBColor(0xF3, 0x9C, 0x12) if score >= 50 else RGBColor(0xD6, 0x30, 0x31))
+    for p in tabela.cell(i, 1).text_frame.paragraphs:
+        for r in p.runs:
+            r.font.bold = True
+            r.font.color.rgb = cor
+tabela.columns[0].width = Inches(5.6)
+tabela.columns[1].width = Inches(2.0)
+tabela.columns[2].width = Inches(2.2)
+tabela.columns[3].width = Inches(2.3)
+_text(s, 0.6, 6.0, 12.1, 1.0,
+      "Score 0–100: verde ≥ 80 · amarelo ≥ 50 · vermelho < 50. O contraste entre as rotas de\n"
+      "demonstração vem dos eventos físicos (frenagem, aceleração, curva), não do modelo de ML.",
+      size=12.5, color=TEXT_DIM, align=PP_ALIGN.CENTER)
 
 # ================================================================ 12. DIFICULDADES
-s = _content_slide(10, "Principais Dificuldades", accent=RED, page=15)
+s = _content_slide(10, "Principais Dificuldades", accent=RED, page=17)
 difs = [
     ("Padronização de parâmetros", "Fontes diferentes nomeiam a mesma grandeza de formas distintas.", BLUE),
     ("Performance na análise", "Commit por evento expirava os objetos do SQLAlchemy — resolvido com commit em lote.", PURPLE),
@@ -459,6 +563,33 @@ y = 1.7
 for titulo, texto, cor in difs:
     _card(s, 0.6, y, 12.1, 1.05, titulo, texto, cor, title_size=14.5, body_size=13)
     y += 1.25
+
+# ================================================================ 14. LIMITAÇÕES
+s = _content_slide(None, "Limitações e Trabalhos Futuros", accent=RED, page=18)
+_text(s, 0.6, 1.5, 6, 0.5, "Limitações", size=16, color=RED, bold=True)
+y = 2.0
+for titulo, texto, cor in [
+    ("Modelo de ML não supervisionado",
+     "Sem rótulos reais: a validação usa as regras de limite como referência.", RED),
+    ("Interface sem testes automatizados",
+     "A GUI é validada por capturas de tela e testes manuais.", ORANGE),
+    ("Ambiente de laboratório",
+     "API sem autenticação e credenciais locais (adequado ao escopo).", YELLOW),
+]:
+    _card(s, 0.6, y, 5.9, 1.2, titulo, texto, cor, title_size=13.5, body_size=12)
+    y += 1.32
+_text(s, 6.9, 1.5, 6, 0.5, "Trabalhos futuros", size=16, color=TEAL, bold=True)
+y = 2.0
+for titulo, texto, cor in [
+    ("Calibração do DBSCAN / RandomForest",
+     "Ajustar eps/min_samples com anomalias sintéticas rotuladas.", BLUE),
+    ("Autenticação e configuração via .env",
+     "Proteger a API e remover credenciais fixas do código.", TEAL),
+    ("Testes de fumaça da GUI e paginação",
+     "Cobertura automatizada e suporte a rotas muito longas.", PURPLE),
+]:
+    _card(s, 6.9, y, 5.9, 1.2, titulo, texto, cor, title_size=13.5, body_size=12)
+    y += 1.32
 
 # ================================================================ 13. OBRIGADO
 slide = prs.slides.add_slide(BLANK)

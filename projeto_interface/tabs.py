@@ -2,7 +2,7 @@
 
 Organização:
   - Dados: Rotas, Leituras e Eventos de Risco, com CRUD completo.
-  - Visão Geral: resumo + score de segurança da rota + exportação CSV.
+  - Visão Geral: resumo + score de segurança da rota + relatório (HTML) e CSV.
   - Gráfico: velocidade, Força G e RPM, com limiares do JSON e tooltip.
   - Análise por Sensor: estatísticas e % de leituras fora do limiar.
   - Comparar: compara o resumo de duas rotas.
@@ -18,6 +18,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 from matplotlib.figure import Figure
 
 from api_client import extract_error, mensagem_conexao
+from relatorio import gerar_relatorio
 
 BG = "#f5f6fa"
 CARD = "white"
@@ -1014,8 +1015,10 @@ class DashboardTab(tk.Frame):
         rodape = tk.Frame(self, bg=BG)
         rodape.pack(fill="x", padx=20, pady=(5, 15))
         _botao(rodape, "Reanalisar", "#0984e3", self.reanalisar, width=16).pack(side="left", padx=(0, 8))
-        _botao(rodape, "Exportar Relatório (CSV)", "#00b894",
-               self.exportar_relatorio, width=24).pack(side="left")
+        _botao(rodape, "Relatório visual (HTML)", "#00b894",
+               self.exportar_relatorio_html, width=24).pack(side="left", padx=(0, 8))
+        _botao(rodape, "Exportar dados (CSV)", "#636e72",
+               self.exportar_relatorio, width=20).pack(side="left")
 
     def atualizar(self):
         rota_id = self.app.rota_atual_id
@@ -1167,6 +1170,39 @@ class DashboardTab(tk.Frame):
             messagebox.showerror("Erro", f"Não foi possível salvar o arquivo:\n{erro}")
             return
         messagebox.showinfo("Sucesso", f"Relatório salvo em:\n{caminho}")
+
+    def exportar_relatorio_html(self):
+        """Gera o relatório visual (HTML autocontido) da rota atual.
+
+        Busca o gráfico da rota em segundo plano e monta o HTML com cards,
+        gráficos e tabelas — tudo embutido em um único arquivo.
+        """
+        if not self.resumo:
+            messagebox.showwarning("Aviso", "Selecione uma rota para gerar o relatório.")
+            return
+        caminho = filedialog.asksaveasfilename(
+            title="Salvar relatório visual", defaultextension=".html",
+            filetypes=[("Página HTML", "*.html")],
+        )
+        if not caminho:
+            return
+        rota_id = self.app.rota_atual_id
+        resumo = self.resumo
+        eventos = list(self.eventos)
+
+        def trabalho():
+            resp = self.app.api.grafico_rota(rota_id)
+            grafico = resp.json() if resp.status_code == 200 else None
+            gerar_relatorio(resumo, eventos, grafico, caminho)
+            return caminho
+
+        self.app.carregar_async(trabalho, self._render_relatorio_html)
+
+    def _render_relatorio_html(self, resultado):
+        if isinstance(resultado, dict) and "__erro__" in resultado:
+            messagebox.showerror("Erro", resultado["__erro__"])
+            return
+        messagebox.showinfo("Sucesso", f"Relatório salvo em:\n{resultado}")
 
 
 # =========================================================================
