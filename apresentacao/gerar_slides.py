@@ -491,7 +491,7 @@ demos = [
     ("Regras de negócio", "Ex.: leitura de rota inexistente, leitura duplicada.", TEAL),
     ("Análise + classificações", "6 tipos de evento detectados pelos 3 métodos.", ORANGE),
     ("Dashboard, sensores e score", "Score 0–100, gráfico, análise por sensor e comparação.", ORANGE),
-    ("Relatório", "Relatório visual (HTML) e exportação dos dados (CSV).", RED),
+    ("Relatório", "Relatório visual (HTML) com nome e pasta de destino.", RED),
 ]
 y = 1.6
 for titulo, texto, cor in demos:

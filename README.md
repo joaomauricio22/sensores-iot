@@ -45,12 +45,18 @@ Trabalho_PAV/
 │   ├── main.py             # Janela principal com navegação lateral
 │   ├── tabs.py             # Seções: Dados (Rotas/Leituras/Eventos), Visão Geral, Gráfico, Sensores, Comparar
 │   ├── api_client.py       # Cliente HTTP
+│   ├── relatorio.py        # Gerador do relatório visual (HTML autocontido)
+│   ├── gerar_relatorio.py  # Relatório via linha de comando → apresentacao/relatorios/
+│   ├── dados_sinteticos.py # Gerador de CSVs sintéticos (perfis de demonstração)
+│   ├── gerar_dados_teste.py# Grava os CSVs demo → apresentacao/dados_teste/
 │   ├── assets/             # Logo e ícone do Sentinela (PNG/ICO)
 │   └── capturar_telas.py   # Captura as telas (exige API no ar) → apresentacao/imgs/
 │
 └── apresentacao/           # Apresentação (slides)
     ├── gerar_slides.py     # Gera o arquivo slides_pav.pptx
-    ├── imgs/               # Capturas de tela usadas nos slides
+    ├── imgs/               # Capturas de tela e foto do adaptador usadas nos slides
+    ├── dados_teste/        # CSVs sintéticos prontos para importar na demo
+    ├── relatorios/         # Relatórios visuais (HTML) gerados
     └── slides_pav.pptx
 ```
 
@@ -231,9 +237,10 @@ Comportamentos da interface:
 - **Gráfico** e **Sensores** têm barra de **zoom/pan** (matplotlib).
 - No **Gráfico**, o seletor **"Painel"** (barra superior) permite exibir um único
   canal (Velocidade, Força G ou RPM) em tela cheia ou os três empilhados (**Todos**).
-- Na **Visão Geral**, o botão **"Relatório visual (HTML)"** gera um relatório
-  autocontido (logo + cards + gráficos + tabelas) que abre no navegador e imprime
-  em PDF; o botão **"Exportar dados (CSV)"** exporta os dados brutos do resumo.
+- Na **Visão Geral**, o botão **"Relatório visual (HTML)"** abre uma janela para
+  **nomear** o relatório e escolher a pasta (padrão: `apresentacao/relatorios`), e
+  gera um arquivo autocontido (logo + cards + gráficos + tabelas) que abre no
+  navegador e imprime em PDF.
 - Se a API estiver fora do ar, a interface mostra **"API offline"** com o botão
   **"Tentar novamente"** e tenta reconectar sozinha.
 
@@ -250,6 +257,7 @@ python test_limpeza.py    # testes unitários da limpeza
 
 cd ../projeto_interface
 python gerar_relatorio.py 104          # relatório visual (HTML) sem abrir a GUI
+python gerar_dados_teste.py            # gera os CSVs demo em apresentacao/dados_teste
 python capturar_telas.py --sim         # recria as rotas demo e captura as telas
 ```
 

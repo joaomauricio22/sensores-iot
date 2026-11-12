@@ -7,7 +7,6 @@ Organização:
   - Análise por Sensor: estatísticas e % de leituras fora do limiar.
   - Comparar: compara o resumo de duas rotas.
 """
-import csv
 import os
 import tkinter as tk
 from datetime import datetime
@@ -18,7 +17,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 from matplotlib.figure import Figure
 
 from api_client import extract_error, mensagem_conexao
-from relatorio import gerar_relatorio
+from relatorio import PASTA_RELATORIOS, gerar_relatorio, nome_arquivo
 
 BG = "#f5f6fa"
 CARD = "white"
@@ -135,11 +134,6 @@ def _para_edicao(data_hora):
     return data_hora.replace("T", " ").split("+")[0]
 
 
-def _so_hora(data_hora):
-    texto = _para_exibicao(data_hora)
-    return texto.split(" ")[1] if " " in texto else texto
-
-
 def _rotulo_rota(rota):
     return f"#{rota['id']} — {rota['nome']}"
 
@@ -180,7 +174,7 @@ class FormDialog(tk.Toplevel):
       obrigatorio (bool), valores (lista de (rótulo, valor) para combo).
     """
 
-    def __init__(self, master, titulo, campos, valores=None):
+    def __init__(self, master, titulo, campos, valores=None, rotulo_salvar="Salvar"):
         super().__init__(master)
         self.title(titulo)
         self.configure(bg=BG)
@@ -189,6 +183,7 @@ class FormDialog(tk.Toplevel):
         self.resultado = None
         self.campos = campos
         self.valores = valores or {}
+        self.rotulo_salvar = rotulo_salvar
         self.widgets = {}
         self._build()
         self.grab_set()
@@ -237,6 +232,20 @@ class FormDialog(tk.Toplevel):
                     container, text="Selecionar…", font=("Segoe UI", 9),
                     cursor="hand2", command=lambda w=widget: self._escolher_arquivo(w),
                 ).pack(side="left", padx=(6, 0))
+            elif tipo == "pasta":
+                # Campo somente leitura com botão "Procurar…" que abre o seletor
+                # de pasta. Guarda o caminho completo escolhido.
+                container = tk.Frame(form, bg=BG)
+                widget = tk.Entry(container, width=34, font=("Segoe UI", 10),
+                                  state="readonly", readonlybackground="#f1f2f6")
+                widget.pack(side="left", fill="x", expand=True)
+                atual = self.valores.get(chave)
+                if atual is not None:
+                    widget.insert(0, str(atual))
+                tk.Button(
+                    container, text="Procurar…", font=("Segoe UI", 9),
+                    cursor="hand2", command=lambda w=widget: self._escolher_pasta(w),
+                ).pack(side="left", padx=(6, 0))
             else:
                 widget = tk.Entry(form, width=40, font=("Segoe UI", 10))
                 atual = self.valores.get(chave)
@@ -249,7 +258,7 @@ class FormDialog(tk.Toplevel):
 
         botoes = tk.Frame(self, bg=BG)
         botoes.pack(pady=14)
-        _botao(botoes, "Salvar", "#00b894", self._salvar, width=12).pack(side="left", padx=5)
+        _botao(botoes, self.rotulo_salvar, "#00b894", self._salvar, width=14).pack(side="left", padx=5)
         _botao(botoes, "Cancelar", CINZA, self.destroy, width=12).pack(side="left", padx=5)
 
     def _escolher_arquivo(self, entrada):
@@ -261,6 +270,13 @@ class FormDialog(tk.Toplevel):
         if caminho:
             entrada.delete(0, "end")
             entrada.insert(0, os.path.basename(caminho))
+
+    def _escolher_pasta(self, entrada):
+        """Abre o seletor de pasta e preenche a entrada com o caminho escolhido."""
+        caminho = filedialog.askdirectory(title="Escolher pasta de destino")
+        if caminho:
+            entrada.delete(0, "end")
+            entrada.insert(0, os.path.normpath(caminho))
 
     def _salvar(self):
         dados = {}
@@ -1016,9 +1032,7 @@ class DashboardTab(tk.Frame):
         rodape.pack(fill="x", padx=20, pady=(5, 15))
         _botao(rodape, "Reanalisar", "#0984e3", self.reanalisar, width=16).pack(side="left", padx=(0, 8))
         _botao(rodape, "Relatório visual (HTML)", "#00b894",
-               self.exportar_relatorio_html, width=24).pack(side="left", padx=(0, 8))
-        _botao(rodape, "Exportar dados (CSV)", "#636e72",
-               self.exportar_relatorio, width=20).pack(side="left")
+               self.exportar_relatorio_html, width=24).pack(side="left")
 
     def atualizar(self):
         rota_id = self.app.rota_atual_id
@@ -1124,68 +1138,43 @@ class DashboardTab(tk.Frame):
             tk.Label(linha, text=str(quantidade), bg=BG, fg=TEXTO,
                      font=("Segoe UI", 11, "bold")).pack(side="left")
 
-    def exportar_relatorio(self):
-        if not self.resumo:
-            messagebox.showwarning("Aviso", "Selecione uma rota para exportar o relatório.")
-            return
-        caminho = filedialog.asksaveasfilename(
-            title="Salvar relatório", defaultextension=".csv",
-            filetypes=[("CSV", "*.csv")],
-        )
-        if not caminho:
-            return
-        resumo = self.resumo
-        try:
-            with open(caminho, "w", newline="", encoding="utf-8-sig") as arquivo:
-                escritor = csv.writer(arquivo, delimiter=";")
-                escritor.writerow(["Relatório de Telemetria Veicular"])
-                escritor.writerow([])
-                escritor.writerow(["Rota", resumo.get("nome")])
-                escritor.writerow(["Score de segurança", resumo.get("score")])
-                escritor.writerow(["Duração (s)", resumo.get("duracao_segundos")])
-                escritor.writerow(["Distância (km)", resumo.get("distancia_km")])
-                escritor.writerow(["Velocidade média (km/h)", resumo.get("velocidade_media")])
-                escritor.writerow(["Velocidade máxima (km/h)", resumo.get("velocidade_maxima")])
-                escritor.writerow(["RPM máximo", resumo.get("rpm_maximo")])
-                escritor.writerow(["Total de eventos", resumo.get("total_eventos")])
-                escritor.writerow([])
-                escritor.writerow(["Eventos por tipo"])
-                for tipo, quantidade in (resumo.get("eventos_por_tipo") or {}).items():
-                    escritor.writerow([tipo, quantidade])
-                escritor.writerow([])
-                escritor.writerow(["Detalhe dos eventos"])
-                escritor.writerow([
-                    "Tipo", "Método", "Canal", "Valor", "Hora",
-                    "Força G", "Instabilidade", "Descrição",
-                ])
-                for evento in self.eventos:
-                    escritor.writerow([
-                        evento.get("classificacao"), evento.get("metodo"),
-                        evento.get("canal"), evento.get("valor"),
-                        _so_hora(evento.get("data_hora")),
-                        evento.get("forca_g"), evento.get("instabilidade"),
-                        evento.get("descricao"),
-                    ])
-        except OSError as erro:
-            messagebox.showerror("Erro", f"Não foi possível salvar o arquivo:\n{erro}")
-            return
-        messagebox.showinfo("Sucesso", f"Relatório salvo em:\n{caminho}")
-
     def exportar_relatorio_html(self):
         """Gera o relatório visual (HTML autocontido) da rota atual.
 
-        Busca o gráfico da rota em segundo plano e monta o HTML com cards,
-        gráficos e tabelas — tudo embutido em um único arquivo.
+        Abre uma janela para nomear o relatório e escolher a pasta de destino
+        (padrão: ``apresentacao/relatorios``). Em seguida busca o gráfico da rota
+        em segundo plano e monta o HTML com cards, gráficos e tabelas — tudo
+        embutido em um único arquivo.
         """
         if not self.resumo:
             messagebox.showwarning("Aviso", "Selecione uma rota para gerar o relatório.")
             return
-        caminho = filedialog.asksaveasfilename(
-            title="Salvar relatório visual", defaultextension=".html",
-            filetypes=[("Página HTML", "*.html")],
+
+        nome_rota = self.resumo.get("nome") or "Rota"
+        nome_sugerido = f"Relatório {nome_rota} — {datetime.now().strftime('%d-%m-%Y')}"
+        dialogo = FormDialog(
+            self, "Relatório visual (HTML)",
+            [
+                {"chave": "nome", "rotulo": "Nome do relatório", "obrigatorio": True},
+                {"chave": "pasta", "rotulo": "Salvar em", "tipo": "pasta", "obrigatorio": True},
+            ],
+            valores={"nome": nome_sugerido, "pasta": PASTA_RELATORIOS},
+            rotulo_salvar="Gerar relatório",
         )
-        if not caminho:
+        if not dialogo.resultado:
             return
+        titulo = dialogo.resultado["nome"].strip()
+        pasta = dialogo.resultado["pasta"]
+
+        # O título dá nome ao arquivo; garante a extensão .html.
+        arquivo = nome_arquivo(titulo) + ".html"
+        caminho = os.path.join(pasta, arquivo)
+        if os.path.exists(caminho):
+            if not messagebox.askyesno(
+                    "Arquivo já existe",
+                    f"'{arquivo}' já existe nesta pasta.\nSubstituir?"):
+                return
+
         rota_id = self.app.rota_atual_id
         resumo = self.resumo
         eventos = list(self.eventos)
@@ -1193,7 +1182,7 @@ class DashboardTab(tk.Frame):
         def trabalho():
             resp = self.app.api.grafico_rota(rota_id)
             grafico = resp.json() if resp.status_code == 200 else None
-            gerar_relatorio(resumo, eventos, grafico, caminho)
+            gerar_relatorio(resumo, eventos, grafico, caminho, titulo=titulo)
             return caminho
 
         self.app.carregar_async(trabalho, self._render_relatorio_html)

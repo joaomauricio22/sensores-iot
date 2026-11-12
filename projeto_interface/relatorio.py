@@ -19,6 +19,8 @@ Formato do relatório:
 import base64
 import html
 import os
+import re
+import unicodedata
 from datetime import datetime
 from io import BytesIO
 
@@ -56,6 +58,18 @@ CINZA = "#636e72"
 BORDA = "#dfe6e9"
 
 _ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+
+# Pasta padrão dos relatórios gerados (junto do material de apresentação).
+PASTA_RELATORIOS = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "apresentacao", "relatorios"))
+
+
+def nome_arquivo(titulo):
+    """Converte um título legível num nome de arquivo seguro (sem acentos)."""
+    texto = unicodedata.normalize("NFKD", titulo or "")
+    texto = texto.encode("ascii", "ignore").decode("ascii")
+    texto = re.sub(r"[^A-Za-z0-9]+", "_", texto).strip("_")
+    return texto or "relatorio"
 
 
 def _cor_score(score):
@@ -203,11 +217,16 @@ def _tabela_eventos(eventos, limite=20):
     return "\n".join(linhas)
 
 
-def gerar_relatorio(resumo, eventos, grafico, caminho):
-    """Gera o relatório visual e grava em ``caminho`` (arquivo HTML único)."""
+def gerar_relatorio(resumo, eventos, grafico, caminho, titulo=None):
+    """Gera o relatório visual e grava em ``caminho`` (arquivo HTML único).
+
+    ``titulo`` é o nome que aparece no cabeçalho e no ``<title>`` do documento.
+    Quando omitido, usa "Relatório de Telemetria Veicular".
+    """
     resumo = resumo or {}
     eventos = eventos or []
     nome = resumo.get("nome") or "Rota sem nome"
+    titulo = titulo or "Relatório de Telemetria Veicular"
     score = resumo.get("score", 0)
     cor_score = _cor_score(score)
 
@@ -275,7 +294,7 @@ def gerar_relatorio(resumo, eventos, grafico, caminho):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Relatório — {_esc(nome)}</title>
+<title>{_esc(titulo)}</title>
 <style>
   :root {{ --navy:#0d1b2a; --texto:#2d3436; --cinza:#636e72; --borda:#dfe6e9; }}
   * {{ box-sizing: border-box; }}
@@ -319,7 +338,7 @@ def gerar_relatorio(resumo, eventos, grafico, caminho):
   <div class="capa">
     {logo_html}
     <div>
-      <h1>Relatório de Telemetria Veicular</h1>
+      <h1>{_esc(titulo)}</h1>
       <div class="sub">Rota: {_esc(nome)} &nbsp;·&nbsp; Sentinela</div>
     </div>
     <div class="data">Gerado em<br>{agora}</div>
@@ -334,5 +353,7 @@ def gerar_relatorio(resumo, eventos, grafico, caminho):
 </body>
 </html>
 """
-    with open(caminho, "w", encoding="utf-8") as arquivo:
+    destino = os.path.abspath(caminho)
+    os.makedirs(os.path.dirname(destino), exist_ok=True)
+    with open(destino, "w", encoding="utf-8") as arquivo:
         arquivo.write(html_final)

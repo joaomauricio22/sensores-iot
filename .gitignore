@@ -24,3 +24,6 @@ projeto_api/dados/
 
 # Backups do banco de dados (gerados localmente)
 backups/
+
+# Relatórios visuais gerados localmente (não publicar; pasta mantida via .gitkeep)
+apresentacao/relatorios/*.html
