@@ -227,7 +227,7 @@ class FormDialog(tk.Toplevel):
                 widget.pack(side="left", fill="x", expand=True)
                 atual = self.valores.get(chave)
                 if atual is not None:
-                    widget.insert(0, str(atual))
+                    self._definir_texto(widget, str(atual))
                 tk.Button(
                     container, text="Selecionar…", font=("Segoe UI", 9),
                     cursor="hand2", command=lambda w=widget: self._escolher_arquivo(w),
@@ -236,12 +236,12 @@ class FormDialog(tk.Toplevel):
                 # Campo somente leitura com botão "Procurar…" que abre o seletor
                 # de pasta. Guarda o caminho completo escolhido.
                 container = tk.Frame(form, bg=BG)
-                widget = tk.Entry(container, width=34, font=("Segoe UI", 10),
+                widget = tk.Entry(container, width=52, font=("Segoe UI", 10),
                                   state="readonly", readonlybackground="#f1f2f6")
                 widget.pack(side="left", fill="x", expand=True)
                 atual = self.valores.get(chave)
                 if atual is not None:
-                    widget.insert(0, str(atual))
+                    self._definir_texto(widget, str(atual))
                 tk.Button(
                     container, text="Procurar…", font=("Segoe UI", 9),
                     cursor="hand2", command=lambda w=widget: self._escolher_pasta(w),
@@ -268,15 +268,26 @@ class FormDialog(tk.Toplevel):
             filetypes=[("CSV", "*.csv"), ("Todos os arquivos", "*.*")],
         )
         if caminho:
-            entrada.delete(0, "end")
-            entrada.insert(0, os.path.basename(caminho))
+            self._definir_texto(entrada, os.path.basename(caminho))
 
     def _escolher_pasta(self, entrada):
         """Abre o seletor de pasta e preenche a entrada com o caminho escolhido."""
         caminho = filedialog.askdirectory(title="Escolher pasta de destino")
         if caminho:
-            entrada.delete(0, "end")
-            entrada.insert(0, os.path.normpath(caminho))
+            self._definir_texto(entrada, os.path.normpath(caminho))
+
+    @staticmethod
+    def _definir_texto(entrada, texto):
+        """Preenche um campo somente leitura.
+
+        No Tk do Windows, ``insert()``/``delete()`` são ignorados quando o
+        ``Entry`` está em ``state="readonly"``. Alterna temporariamente para
+        ``normal``, aplica o texto e volta para ``readonly``.
+        """
+        entrada.configure(state="normal")
+        entrada.delete(0, "end")
+        entrada.insert(0, texto)
+        entrada.configure(state="readonly")
 
     def _salvar(self):
         dados = {}
