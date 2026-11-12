@@ -505,9 +505,9 @@ s = _content_slide(None, "Resultados — perfil de condução", accent=TEAL, pag
 _resultados = [
     ("Condução Defensiva (demonstração)", 88, 19, "7,10 km"),
     ("Condução Agressiva (demonstração)", 56, 70, "7,07 km"),
-    ("Rota real 1 — rota_1", 57, 49, "5,47 km"),
-    ("Rota real 2 — CSVLog 08h", 59, 142, "15,67 km"),
-    ("Rota real 3 — CSVLog 15h", 70, 90, "8,78 km"),
+    ("Rota real 1 — rota_1", 57, 47, "5,47 km"),
+    ("Rota real 2 — CSVLog 08h", 61, 127, "15,67 km"),
+    ("Rota real 3 — CSVLog 15h", 68, 98, "8,78 km"),
 ]
 cabecalhos = ["Rota", "Score", "Eventos", "Distância"]
 gf = s.shapes.add_table(len(_resultados) + 1, 4, Inches(0.6), Inches(1.7),
