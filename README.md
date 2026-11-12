@@ -229,6 +229,8 @@ Comportamentos da interface:
 
 - **Nova Rota** aceita **vários CSVs de uma vez**; cada arquivo vira uma rota
   com o nome do próprio arquivo.
+- Ao **editar uma rota**, deixar o campo **"Arquivo de origem"** em branco
+  **preserva** o nome anterior (a edição não apaga o arquivo de origem por acidente).
 - As tabelas de **Dados** carregam na primeira visita a cada aba e, depois disso,
   são atualizadas **manualmente** pelo botão **Atualizar** (criar/editar/excluir
   não recarrega a tabela; só o combo global de rotas).

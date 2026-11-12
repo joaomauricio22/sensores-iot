@@ -84,6 +84,17 @@ def main():
         })
         show("PUT rota (200)", r.status_code == 200 and "editada" in r.json().get("nome", ""))
 
+        # Editar sem informar arquivo_origem deve PRESERVAR o valor anterior
+        # (uma edição não pode apagar o nome do arquivo de origem por acidente).
+        r = requests.put(f"{BASE}/rotas/{rota_id}", json={
+            "nome": f"Rota teste {SUFIXO} (renomeada)",
+        })
+        show(
+            "PUT rota sem arquivo_origem preserva valor (200)",
+            r.status_code == 200 and r.json().get("arquivo_origem") == "teste.csv",
+            f"{r.status_code} {r.text[:80]}",
+        )
+
         r = requests.get(f"{BASE}/rotas/999999")
         show("GET rota inexistente (404)", r.status_code == 404)
 

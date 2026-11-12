@@ -33,7 +33,12 @@ class RotaService:
         nome = str(nome).strip()
         self.__validar_tamanhos(nome, arquivo_origem)
         rota.nome = nome
-        rota.arquivo_origem = arquivo_origem or None
+        # Só sobrescreve o arquivo de origem quando um valor é informado:
+        # ``None`` (campo omitido/em branco na edição) mantém o valor atual;
+        # ``""`` limpa explicitamente. Evita que uma edição de rota apague o
+        # nome do arquivo de origem por acidente.
+        if arquivo_origem is not None:
+            rota.arquivo_origem = arquivo_origem or None
         return self.__repository.update(rota)
 
     def __validar_tamanhos(self, nome, arquivo_origem):
