@@ -4,7 +4,8 @@ Organização:
   - Dados: Rotas, Leituras e Eventos de Risco, com CRUD completo.
   - Visão Geral: resumo + score de segurança da rota + relatório (HTML) e CSV.
   - Gráfico: velocidade, Força G e RPM, com limiares do JSON e tooltip.
-  - Análise por Sensor: estatísticas e % de leituras fora do limiar.
+  - Análise por Sensor: estatísticas e % de leituras fora do limiar (por rota
+    ou agregada em todas as rotas).
   - Comparar: compara o resumo de duas rotas.
 """
 import os
@@ -1458,9 +1459,24 @@ class SensorTab(tk.Frame):
     def _build(self):
         _titulo(self, "Análise por Sensor",
                 "Estatísticas dos sensores e % de leituras fora do limiar configurado.")
-        self.lbl_status = tk.Label(self, text="", bg=BG, fg=CINZA,
+        filtros = tk.Frame(self, bg=BG)
+        filtros.pack(fill="x", padx=20)
+        # Modo agregado: alimenta a tabela e o gráfico de barras com TODAS as
+        # rotas (cada leitura conta uma vez), em vez de só a rota selecionada.
+        # Fica local à aba porque o seletor global também serve Visão Geral e
+        # Gráfico, onde "todas" não faz sentido (score/duração são por rota).
+        self.var_todas = tk.BooleanVar(value=False)
+        self.chk_todas = tk.Checkbutton(
+            filtros, text="Todas as rotas", variable=self.var_todas,
+            command=self.atualizar, bg=BG, fg=TEXTO,
+            activebackground=BG, activeforeground=TEXTO,
+            selectcolor=CARD, font=("Segoe UI", 9),
+            highlightthickness=0, bd=0, cursor="hand2",
+        )
+        self.chk_todas.pack(side="left")
+        self.lbl_status = tk.Label(filtros, text="", bg=BG, fg=CINZA,
                                    font=("Segoe UI", 9))
-        self.lbl_status.pack(anchor="w", padx=20)
+        self.lbl_status.pack(side="left", padx=(14, 0))
 
         tabela = tk.Frame(self, bg=BG)
         tabela.pack(fill="both", expand=False, padx=20, pady=(5, 4))
@@ -1485,6 +1501,9 @@ class SensorTab(tk.Frame):
         self.toolbar.pack(fill="x", padx=20, pady=(0, 10))
 
     def atualizar(self):
+        if self.var_todas.get():
+            self._atualizar_todas()
+            return
         rota_id = self.app.rota_atual_id
         if not rota_id:
             self.lbl_status.configure(
@@ -1505,6 +1524,34 @@ class SensorTab(tk.Frame):
 
         self.app.carregar_async(carregar, self._render)
 
+    def _atualizar_todas(self):
+        """Carrega as leituras de todas as rotas e agrega num único conjunto."""
+        ids = [r["id"] for r in self.app.rotas]
+        if not ids:
+            self.lbl_status.configure(
+                text="Nenhuma rota cadastrada. Importe um CSV em Dados → Rotas."
+            )
+            self._limpar()
+            return
+
+        self.lbl_status.configure(text=f"Carregando {len(ids)} rota(s)…")
+
+        def carregar():
+            pontos = []
+            analisadas = 0
+            ignoradas = 0
+            for rota_id in ids:
+                resp = self.app.api.grafico_rota(rota_id)
+                if resp.status_code != 200:
+                    ignoradas += 1
+                    continue
+                pontos.extend(resp.json().get("pontos") or [])
+                analisadas += 1
+            resp_limiares = self.app.api.get_limiares()
+            return set(ids), pontos, resp_limiares, analisadas, ignoradas
+
+        self.app.carregar_async(carregar, self._render_todas)
+
     def _limpar(self):
         for item in self.tree.get_children():
             self.tree.delete(item)
@@ -1519,7 +1566,8 @@ class SensorTab(tk.Frame):
             self._limpar()
             return
         rota_id, resp, resp_limiares = resultado
-        if rota_id != self.app.rota_atual_id:
+        # Descarta resultado atrasado (rota trocada ou modo "Todas" ativado).
+        if rota_id != self.app.rota_atual_id or self.var_todas.get():
             return
         if resp.status_code != 200:
             self.lbl_status.configure(text=extract_error(resp))
@@ -1536,6 +1584,38 @@ class SensorTab(tk.Frame):
             self._limpar()
             return
 
+        self._exibir(pontos, limiares, f"{len(pontos)} leitura(s) analisadas.")
+
+    def _render_todas(self, resultado):
+        if isinstance(resultado, dict) and "__erro__" in resultado:
+            self.lbl_status.configure(text=resultado["__erro__"])
+            self._limpar()
+            return
+        ids, pontos, resp_limiares, analisadas, ignoradas = resultado
+        # Descarta resultado atrasado: modo desmarcado ou rotas alteradas
+        # (importação/exclusão) enquanto o carregamento estava em andamento.
+        if not self.var_todas.get() or ids != {r["id"] for r in self.app.rotas}:
+            return
+        limiares = resp_limiares.json() if resp_limiares.status_code == 200 else {}
+        limiares = limiares.get("limiares", limiares)  # compatibilidade
+
+        if not pontos:
+            self.lbl_status.configure(text="As rotas não possuem leituras.")
+            self._limpar()
+            return
+
+        # Agregação "micro": cada leitura do conjunto pesa igual, então rotas
+        # longas influenciam mais o percentual do que rotas curtas.
+        texto = (
+            f"{analisadas} rota(s) • {len(pontos)} leitura(s) analisadas "
+            "(agregado por leitura)"
+        )
+        if ignoradas:
+            texto += f" — {ignoradas} rota(s) ignorada(s)"
+        self._exibir(pontos, limiares, texto)
+
+    def _exibir(self, pontos, limiares, texto_status):
+        """Preenche a tabela e o gráfico de barras com as métricas calculadas."""
         metricas = self._calcular(pontos, limiares)
 
         for item in self.tree.get_children():
@@ -1552,7 +1632,7 @@ class SensorTab(tk.Frame):
             ))
 
         self._desenhar_barras(metricas)
-        self.lbl_status.configure(text=f"{len(pontos)} leitura(s) analisadas.")
+        self.lbl_status.configure(text=texto_status)
 
     def _calcular(self, pontos, limiares):
         def serie(campo):
@@ -1628,7 +1708,10 @@ class SensorTab(tk.Frame):
         topo = max(valores) * 1.15 if valores else 0
         self.ax.set_ylim(0, max(topo, 10))
         for barra, m in zip(barras, metricas):
-            rotulo = "—" if m.get("sem_dados") else f"{m['fora_pct']:.1f}%"
+            # Mostra o percentual e a contagem absoluta: no modo "Todas as
+            # rotas" os percentuais são pequenos (milhares de leituras), e o
+            # número de leituras fora evita a leitura "0,0%" como "nenhuma".
+            rotulo = "—" if m.get("sem_dados") else f"{m['fora_pct']:.1f}% ({m['fora_n']})"
             self.ax.text(barra.get_x() + barra.get_width() / 2,
                          barra.get_height() + max(topo, 10) * 0.02,
                          rotulo, ha="center", va="bottom", fontsize=9)

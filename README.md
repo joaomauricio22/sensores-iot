@@ -237,6 +237,9 @@ Comportamentos da interface:
 - O seletor **"Rota em análise"** (barra superior) aparece apenas em
   **Visão Geral**, **Gráfico** e **Sensores**.
 - **Gráfico** e **Sensores** têm barra de **zoom/pan** (matplotlib).
+- Em **Sensores**, a caixa **"Todas as rotas"** agrega as leituras de todas as
+  rotas na tabela e no gráfico de barras (cada leitura conta uma vez, então
+  rotas longas pesam mais). Desmarcada, analisa apenas a rota selecionada.
 - No **Gráfico**, o seletor **"Painel"** (barra superior) permite exibir um único
   canal (Velocidade, Força G ou RPM) em tela cheia ou os três empilhados (**Todos**).
 - Na **Visão Geral**, o botão **"Relatório visual (HTML)"** abre uma janela para
