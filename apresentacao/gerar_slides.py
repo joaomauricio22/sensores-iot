@@ -372,7 +372,7 @@ for titulo, texto, cor in _cards2:
 s = _content_slide(None, "Detecção de Risco — 3 métodos", accent=RED, page=9)
 metodos = [
     ("1", "LIMITE", "Aceleração longitudinal\nfora dos limites do CTB\n(+2,5 / -3,0 m/s²).", BLUE),
-    ("2", "ESTATÍSTICO", "z-score (|z| > 3) da Força G\nem relação ao histórico\nda rota.", PURPLE),
+    ("2", "ESTATÍSTICO", "Z-score = (leitura − média)\ndividido pelo desvio padrão\n|z| > 3 → anomalia\n(Força G vs. padrão da rota)", PURPLE),
     ("3", "MODELO_ML", "DBSCAN (pseudo-rótulos)\n+ RandomForest:\nclassifica eventos de risco.", TEAL),
 ]
 x = 0.6
@@ -382,10 +382,11 @@ for num, nome, desc, cor in metodos:
     _text(s, x + 0.25, 2.75, 3.4, 0.6, nome, size=18, color=cor, bold=True)
     _text(s, x + 0.3, 3.4, 3.3, 1.6, desc, size=14, color=TEXT)
     x += 4.15
-_text(s, 0.6, 5.35, 12.1, 1.3,
+_text(s, 0.6, 5.3, 12.1, 1.5,
       "Força G resultante = √(ax² + ay²)   •   instabilidade = desvio padrão da aceleração (janela de 3 s).\n"
+      "Ex.: leitura 2,2 · média 1,0 · desvio 0,3 → Z-score = (2,2 − 1,0) ÷ 0,3 = 4,0 → anomalia.\n"
       "6 classificações: frenagem brusca · aceleração brusca · curva em alta velocidade · excesso de velocidade · RPM excessivo · acelerador brusco.",
-      size=13.5, color=TEXT_DIM, align=PP_ALIGN.CENTER)
+      size=12.5, color=TEXT_DIM, align=PP_ALIGN.CENTER)
 
 # ================================================================ 9. ENDPOINTS
 s = _content_slide(7, "Endpoints da API", accent=BLUE, page=10)
