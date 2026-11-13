@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Sentinela — Roteiro de apresentação</title>
+<style>
+  @page { size: A4; margin: 9mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 7.7pt;
+    line-height: 1.26;
+    color: #1e272e;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 2px solid #0984e3; padding-bottom: 2mm; margin-bottom: 2.5mm;
+  }
+  header h1 { font-size: 13.5pt; margin: 0; letter-spacing: .2px; }
+  header .meta { font-size: 7.6pt; color: #636e72; text-align: right; }
+  .cols { column-count: 2; column-gap: 7mm; }
+  section { break-inside: avoid; margin-bottom: 2mm; }
+  h2 {
+    font-size: 8.2pt; text-transform: uppercase; letter-spacing: .5px;
+    color: #0984e3; margin: 0 0 1mm; padding-bottom: .5mm;
+    border-bottom: 1px solid #dfe6e9;
+  }
+  p { margin: 0 0 1.2mm; }
+  ul { margin: 0 0 1.2mm; padding-left: 3.6mm; }
+  li { margin-bottom: .5mm; }
+  .pitch {
+    background: #f0f7ff; border-left: 2.5px solid #0984e3;
+    padding: 1.6mm 2mm; font-style: italic;
+  }
+  code {
+    font-family: Consolas, monospace; font-size: 7.6pt;
+    background: #f1f2f6; padding: 0 .6mm; border-radius: 1px;
+  }
+  pre {
+    font-family: Consolas, monospace; font-size: 7.2pt; line-height: 1.28;
+    background: #f1f2f6; border: 1px solid #dfe6e9; border-radius: 2px;
+    padding: 1.6mm 2mm; margin: 0 0 1.2mm; white-space: pre-wrap;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 0 0 1mm; }
+  th, td { text-align: left; padding: .55mm .9mm; border-bottom: 1px solid #eef1f4; vertical-align: top; }
+  th { font-size: 7.4pt; text-transform: uppercase; letter-spacing: .3px; color: #636e72; }
+  td:first-child { white-space: nowrap; font-weight: 600; }
+  .q td:first-child { white-space: normal; font-weight: 600; }
+  .num { font-weight: 700; color: #0984e3; }
+  .warn { color: #d63031; font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 1.4mm; }
+  .chip {
+    background: #f1f2f6; border: 1px solid #dfe6e9; border-radius: 10px;
+    padding: .5mm 2mm; font-size: 7.6pt;
+  }
+  .chip b { color: #0984e3; }
+  footer { margin-top: 2mm; font-size: 7pt; color: #b2bec3; text-align: center; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Sentinela — Roteiro de apresentação</h1>
+  <div class="meta">João Maurício Araújo Leitão<br>13/11/2026</div>
+</header>
+
+<div class="cols">
+
+  <section>
+    <h2>1. Abertura (30 s)</h2>
+    <p class="pitch">"O Sentinela recebe telemetria veicular via OBD-II, padroniza e armazena em
+    PostgreSQL e usa <b>três métodos</b> — limites do CTB, z-score histórico e Machine Learning —
+    para detectar e classificar eventos de risco, gerando um <b>score de segurança por
+    quilômetro</b> e relatórios visuais."</p>
+    <p><i>Transição: "Antes do código, o problema: como saber se uma viagem foi perigosa?"</i></p>
+  </section>
+
+  <section>
+    <h2>2. Antes de apresentar (5 min)</h2>
+    <pre>1) Abrir o Docker Desktop ("Running")
+cd C:\Users\jo22m\Documents\Trabalho_PAV\projeto_api
+docker compose up -d && docker compose ps
+
+2) powershell -c "Invoke-RestMethod http://localhost:8080/telemetria/rotas"
+
+3) cd ..\projeto_interface && python main.py</pre>
+    <ul>
+      <li><b>Backup:</b> PDF dos slides + 1 relatório HTML já gerado.</li>
+      <li><span class="warn">NUNCA</span> rodar <code>docker compose down -v</code> (apaga o banco).</li>
+      <li>CSVs da demo em <code>apresentacao\dados_teste\</code>.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>3. Demo (7 min)</h2>
+    <table>
+      <tr><th>#</th><th>Onde</th><th>Mostrar / dizer</th></tr>
+      <tr><td>1</td><td>Terminal</td><td><code>ps</code> + <code>GET /rotas</code>: a GUI fala HTTP, não com o banco</td></tr>
+      <tr><td>2</td><td>Dados → Rotas</td><td>Nova Rota → <code>Conducao_Agressiva.csv</code></td></tr>
+      <tr><td>3</td><td>Visão Geral</td><td>Score 0–100 normalizado por km + KPIs + eventos por tipo</td></tr>
+      <tr><td>4</td><td>Gráfico</td><td>Zoom + Painel (Velocidade / Força G / RPM); pontos = eventos</td></tr>
+      <tr><td>5</td><td>Sensores</td><td>Marcar <b>"Todas as rotas"</b> → agregado</td></tr>
+      <tr><td>6</td><td>Comparar</td><td>Agressiva × Defensiva</td></tr>
+      <tr><td>7</td><td>Relatório</td><td>Gerar HTML e abrir no navegador</td></tr>
+      <tr><td>8</td><td>Dados → Eventos</td><td>Método: LIMITE / ESTATISTICO / MODELO_ML</td></tr>
+      <tr><td>9</td><td>Slides</td><td>Arquitetura · slide 8 (classes) · slide 9 (z-score)</td></tr>
+    </table>
+    <p><i>Transição: "Agora que vocês viram o resultado, vou mostrar como o sistema decide."</i></p>
+  </section>
+
+  <section>
+    <h2>4. Endpoints (13 caminhos)</h2>
+    <p style="font-size:7.6pt;color:#636e72">Base: <code>http://localhost:8080/telemetria</code></p>
+    <table>
+      <tr><th>Método</th><th>Endpoint</th><th>Função</th></tr>
+      <tr><td>GET/POST</td><td><code>/rotas</code></td><td>Listar / cadastrar</td></tr>
+      <tr><td>POST</td><td><code>/rotas/importar</code></td><td>Importar CSV</td></tr>
+      <tr><td>GET/PUT/DEL</td><td><code>/rotas/&lt;id&gt;</code></td><td>Detalhe / editar / excluir</td></tr>
+      <tr><td>POST</td><td><code>/rotas/&lt;id&gt;/analisar</code></td><td>Reanálise forçada</td></tr>
+      <tr><td>GET</td><td><code>/rotas/&lt;id&gt;/resumo</code></td><td>Score + KPIs</td></tr>
+      <tr><td>GET</td><td><code>/rotas/&lt;id&gt;/grafico</code></td><td>Pontos do gráfico</td></tr>
+      <tr><td>POST</td><td><code>/rotas/comparar</code></td><td>2 a 5 rotas</td></tr>
+      <tr><td>GET/POST</td><td><code>/leituras?rota_id=</code></td><td>Listar / cadastrar</td></tr>
+      <tr><td>GET/PUT/DEL</td><td><code>/leituras/&lt;id&gt;</code></td><td>Detalhe / editar / excluir</td></tr>
+      <tr><td>GET/POST</td><td><code>/eventos-risco?rota_id=&amp;tipo=</code></td><td>Listar / cadastrar</td></tr>
+      <tr><td>GET/PUT/DEL</td><td><code>/eventos-risco/&lt;id&gt;</code></td><td>Detalhe / editar / excluir</td></tr>
+      <tr><td>GET</td><td><code>/limiares</code></td><td>Somente leitura</td></tr>
+      <tr><td>GET</td><td><code>/sensores</code></td><td>Catálogo S01…S08</td></tr>
+    </table>
+    <p><b>Status:</b> 200 ok · 201 criado · 400 validação · 404 não encontrado · 409 duplicado · 405 proibido · 500 interno.</p>
+  </section>
+
+  <section>
+    <h2>5. Perguntas prováveis</h2>
+    <table class="q">
+      <tr><th>Pergunta</th><th>Resposta</th></tr>
+      <tr><td>Onde está a regra X?</td><td>Tabela do README mapeia as 10 regras</td></tr>
+      <tr><td>Por que 3 tabelas?</td><td><code>rota → leitura → evento_risco</code>; limiares/sensores em JSON</td></tr>
+      <tr><td>Por que banco vazio?</td><td>Requisito; <code>seed.py</code> é opcional</td></tr>
+      <tr><td>Como o ML decide?</td><td>StandardScaler → DBSCAN(eps 1,0; min 15) → RandomForest</td></tr>
+      <tr><td>Com quais dados treina?</td><td>Com as <b>outras</b> rotas; fallback para a própria</td></tr>
+      <tr><td>Por que z-score 3?</td><td>Regra 3σ (~99,7%); configurável</td></tr>
+      <tr><td>Como o score funciona?</td><td><code>100 − 2,0 × penalidade/km</code>, pesos por tipo</td></tr>
+      <tr><td>Como evita duplicata?</td><td><code>UNIQUE (rota_id, data_hora)</code> e <code>(leitura_id, metodo, classificacao, canal)</code></td></tr>
+      <tr><td>Onde há herança?</td><td><code>DetectorAnomalia</code> → 3 detectores</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>6. Pontos fracos (admita com maturidade)</h2>
+    <ul>
+      <li><b>OBDLink com score 0:</b> ruído no acelerador (634 eventos) → melhoria: suavização.</li>
+      <li><b><code>forca_g_max</code> no gráfico mas não no método LIMITE:</b> os métodos 2 e 3 capturam; melhoria: incluir no <code>LimiteDetector</code>.</li>
+      <li><b>Agregação por leitura:</b> rotas longas pesam mais (decisão consciente).</li>
+      <li><b>ML com pseudo-rótulos:</b> sem ground truth; <code>avaliar_ml.py</code> mede silhouette.</li>
+    </ul>
+    <p><i>Transição: "Por fim, o que ficou como melhoria."</i></p>
+  </section>
+
+  <section>
+    <h2>7. Plano B</h2>
+    <table>
+      <tr><th>Se falhar…</th><th>Faça</th></tr>
+      <tr><td>Docker não subir</td><td>Relatório HTML + slides + capturas em <code>apresentacao/imgs</code></td></tr>
+      <tr><td>API cair</td><td><code>docker compose restart</code>; a GUI reconecta sozinha</td></tr>
+      <tr><td>Import falhar</td><td>Usar as rotas já no banco</td></tr>
+      <tr><td>PowerPoint não abrir</td><td>PDF de backup</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>8. Números e extras</h2>
+    <div class="chips">
+      <span class="chip"><b>3</b> tabelas</span>
+      <span class="chip"><b>3</b> métodos</span>
+      <span class="chip"><b>7</b> classificações</span>
+      <span class="chip"><b>10</b> regras</span>
+      <span class="chip"><b>13</b> endpoints</span>
+      <span class="chip"><b>19</b> slides</span>
+      <span class="chip"><b>6</b> rotas</span>
+      <span class="chip"><b>18.984</b> leituras</span>
+    </div>
+    <p style="margin-top:1mm"><b>Se sobrar tempo:</b> <code>test_api.py</code> (testes verdes) ·
+    <code>reanalisar.py</code> (novos limiares) · <code>avaliar_ml.py</code> (métricas do modelo).</p>
+  </section>
+
+</div>
+
+<footer>Sentinela — Telemetria e Segurança Veicular · roteiro gerado em 13/11/2026</footer>
+
+</body>
+</html>
